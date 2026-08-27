@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Models\Interview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -11,16 +12,36 @@ use Spatie\SimpleExcel\SimpleExcelReader;
 
 class InterviewController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $query = Interview::with('user')->latest();
+        $query = Interview::with('user')
+            ->orderByRaw("CASE status WHEN 'draft' THEN 1 WHEN 'pending' THEN 2 WHEN 'approved' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END ASC")
+            ->latest('updated_at');
         
+        $users = [];
         if (!auth()->user()->isAdmin()) {
             $query->where('user_id', auth()->id());
+        } else {
+            $users = User::orderBy('name')->get();
+            if ($request->filled('user_id')) {
+                $query->where('user_id', $request->user_id);
+            }
         }
 
-        $interviews = $query->paginate(15);
-        return view('dashboard', compact('interviews'));
+        if ($request->filled('status')) {
+            if ($request->status === 'expired') {
+                $query->where('status', 'approved')->whereNotNull('link_expires_at')->where('link_expires_at', '<', now());
+            } elseif ($request->status === 'approved') {
+                $query->where('status', 'approved')->where(function($q) {
+                    $q->whereNull('link_expires_at')->orWhere('link_expires_at', '>=', now());
+                });
+            } else {
+                $query->where('status', $request->status);
+            }
+        }
+
+        $interviews = $query->paginate(15)->appends($request->query());
+        return view('dashboard', compact('interviews', 'users'));
     }
 
     public function import(Request $request)
@@ -168,7 +189,10 @@ Rules:
                 'status' => 'pending',
             ]);
 
-            return redirect()->route('interviews.review', $interview->id);
+            return redirect()->route('interviews.review', array_filter([
+                'interview' => $interview->id,
+                'page' => request('page')
+            ]));
         } catch (\Throwable $e) {
             Log::error('generateQuestions error: ' . $e->getMessage());
 
@@ -201,7 +225,7 @@ Rules:
             'link_expires_at' => now()->addHours(48),
         ]);
 
-        return redirect()->route('dashboard')
+        return redirect()->route('dashboard', array_filter(['page' => request('page')]))
             ->with('success', 'Link activated for ' . $interview->candidate_name);
     }
 

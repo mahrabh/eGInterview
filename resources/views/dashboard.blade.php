@@ -7,6 +7,28 @@
         </div>
         
         <div class="flex items-center gap-4">
+            <form action="{{ route('dashboard') }}" method="GET" class="flex items-center gap-3">
+                @if(auth()->user()->isAdmin() && isset($users))
+                <select name="user_id" onchange="this.form.submit()" class="glass-panel px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-300 uppercase tracking-widest bg-slate-900 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
+                    <option value="">All Created Users</option>
+                    @foreach($users as $u)
+                        <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>
+                            {{ $u->name }}
+                        </option>
+                    @endforeach
+                </select>
+                @endif
+                
+                <select name="status" onchange="this.form.submit()" class="glass-panel px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-300 uppercase tracking-widest bg-slate-900 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
+                    <option value="">All Statuses</option>
+                    <option value="draft" {{ request('status') === 'draft' ? 'selected' : '' }}>Before Interview</option>
+                    <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending Approval</option>
+                    <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Link Active</option>
+                    <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Link Expired</option>
+                    <option value="completed" {{ request('status') === 'completed' ? 'selected' : '' }}>Completed</option>
+                </select>
+            </form>
+
             @if(!auth()->user()->isAdmin() && auth()->user()->plan)
                 <div class="glass-panel px-4 py-2.5 rounded-xl border border-indigo-500/20 flex items-center gap-2">
                     <span class="text-xs font-bold text-indigo-400 uppercase tracking-widest">{{ auth()->user()->plan->name }}: {{ auth()->user()->interviews()->count() }} / {{ auth()->user()->plan->interview_limit }} Used</span>
@@ -85,12 +107,7 @@
                             <div>
                                 <h3 class="font-bold text-white text-base">{{ $item->candidate_name }}</h3>
                                 <p class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1">{{ $item->applied_role }}</p>
-                                @if(auth()->user()->isAdmin() && $item->user)
-                                <p class="text-[10px] text-indigo-400 mt-1 font-bold flex items-center gap-1">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                                    Added by: {{ $item->user->name }}
-                                </p>
-                                @endif
+
                                 @unless($item->candidate_photo)
                                 <p class="text-[10px] text-slate-500 mt-1">No photo captured.</p>
                                 @endunless
@@ -102,11 +119,22 @@
                         <div class="flex items-center gap-3">
                             @if($item->status === 'draft')
                             <span class="inline-flex px-4 py-1.5 text-xs font-bold bg-slate-800 border border-slate-700 text-slate-400 rounded-full">Awaiting Setup</span>
+                            @elseif($item->status === 'pending')
+                            <span class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-full">
+                                Pending Review
+                            </span>
                             @elseif($item->status === 'approved')
+                            @if($item->link_expires_at && \Carbon\Carbon::parse($item->link_expires_at)->isPast())
+                            <span class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                Link Expired
+                            </span>
+                            @else
                             <span class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full">
                                 <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
                                 Link Active
                             </span>
+                            @endif
                             @elseif($item->status === 'completed')
                             <span class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
@@ -124,13 +152,19 @@
                     <td class="px-8 py-6">
                         <div class="flex items-center justify-end gap-3 opacity-80 group-hover:opacity-100 transition-opacity">
                             @if($item->status === 'draft')
-                            <form action="{{ route('interviews.generate', $item->id) }}" method="POST">
+                            <form action="{{ route('interviews.generate', array_filter(['interview' => $item->id, 'page' => request('page')])) }}" method="POST">
                                 @csrf
                                 <button type="submit" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                                    Generate  Questions
+                                    Generate Questions
                                 </button>
                             </form>
+                            
+                            @elseif($item->status === 'pending')
+                            <a href="{{ route('interviews.review', array_filter(['interview' => $item->id, 'page' => request('page')])) }}" class="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)]">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                Review Questions
+                            </a>
                             
                             @elseif($item->status === 'approved')
                             <div class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl p-1.5 pr-3">
@@ -146,7 +180,7 @@
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                                     </button>
                                 </form>
-                                <form action="{{ route('interviews.generate', $item->id) }}" method="POST">
+                                <form action="{{ route('interviews.generate', array_filter(['interview' => $item->id, 'page' => request('page')])) }}" method="POST">
                                     @csrf
                                     <button type="submit" class="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-xl border border-transparent hover:border-amber-500/20 transition-all" title="Regenerate Questions">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>

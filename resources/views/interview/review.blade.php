@@ -16,8 +16,7 @@
                 </h2>
                 <p class="text-slate-500 mt-2">Role: {{ $interview->applied_role }}</p>
             </div>
-
-            <form action="{{ route('interviews.approve', $interview->id) }}" method="POST" id="questions-form">
+            <form action="{{ route('interviews.approve', array_filter(['interview' => $interview->id, 'page' => request('page')])) }}" method="POST" id="questions-form">
                 @csrf
 
                 <div class="space-y-6" id="questions-container">
@@ -49,7 +48,7 @@
                 </div>
 
                 <div class="mt-8 flex justify-end gap-4">
-                    <a href="{{ route('dashboard') }}" class="px-6 py-3 border border-slate-300 text-slate-600 font-bold rounded-lg hover:bg-slate-50">
+                    <a href="{{ route('dashboard', array_filter(['page' => request('page')])) }}" class="px-6 py-3 border border-slate-300 text-slate-600 font-bold rounded-lg hover:bg-slate-50">
                         Cancel
                     </a>
                     <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-lg shadow-sm">
