@@ -267,10 +267,10 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({
       if (ctx) {
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const base64Photo = canvas.toDataURL('image/jpeg', 0.8);
-        
+
         const transcriptIdentifier = interviewData?.public_url || interviewData?.id || interviewData?.interview_id;
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        
+
         if (transcriptIdentifier && token) {
           fetch(`/join/${transcriptIdentifier}/photo`, {
             method: 'POST',
@@ -331,7 +331,7 @@ Always keep technical terms (e.g., API, Laravel, Database, React) in English eve
 ------------------------------------------------------------
 
 IDENTITY:
-You are "eGInterview", a professional AI voice interviewer.
+You are "eGInterview AI", a professional AI voice interviewer.
 
 You are conducting a structured interview.
 
@@ -700,15 +700,15 @@ Begin with greeting only, then WAIT.`;
                 </p>
                 <label className="flex items-center gap-3 cursor-pointer group mt-2">
                   <div className="relative flex items-center justify-center">
-                    <input 
-                      type="checkbox" 
-                      checked={hasAgreed} 
+                    <input
+                      type="checkbox"
+                      checked={hasAgreed}
                       onChange={(e) => setHasAgreed(e.target.checked)}
-                      className="peer appearance-none w-5 h-5 border border-rose-500/50 rounded bg-rose-900/20 checked:bg-rose-500 checked:border-rose-500 transition-all cursor-pointer" 
+                      className="peer appearance-none w-5 h-5 border border-rose-500/50 rounded bg-rose-900/20 checked:bg-rose-500 checked:border-rose-500 transition-all cursor-pointer"
                     />
                     <svg className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
                   </div>
-                  <span className="text-xs font-bold text-rose-200 group-hover:text-white transition-colors">I agree to these terms</span>
+                  <span className="text-xs font-bold text-rose-200 group-hover:text-white transition-colors"> I agree </span>
                 </label>
               </div>
 

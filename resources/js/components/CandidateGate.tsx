@@ -124,10 +124,10 @@ export const CandidateGate: React.FC<CandidateGateProps> = ({
 
       <div className="space-y-3">
         <h3 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-300">
-          Welcome to Your Interview
+          Welcome to Your AI Interview
         </h3>
         <p className="text-sm text-slate-400 leading-relaxed px-4">
-          Hi {interviewData?.candidate_name?.split(' ')[0] || 'Candidate'}, you are applying for the <span className="text-white font-medium">{interviewData?.applied_role}</span> role.
+          Hi {interviewData?.candidate_name?.split(' ')[0] || 'Candidate'}, you have applied for the <span className="text-white font-medium">{interviewData?.applied_role}</span> role.
         </p>
       </div>
 

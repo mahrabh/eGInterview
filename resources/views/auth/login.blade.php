@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | eGInterview</title>
+    <title>Login | eGInterview AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -52,7 +52,7 @@
             <div class="w-14 h-14 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 border border-white/10 mb-4 overflow-hidden">
                 <span class="text-white font-black text-xl">eG</span>
             </div>
-            <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">eGInterview</h1>
+            <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">eGInterview AI</h1>
             <p class="text-[10px] sm:text-[11px] font-bold text-indigo-400 uppercase tracking-[0.2em] mt-1.5">Recruiter Terminal</p>
         </div>
 
