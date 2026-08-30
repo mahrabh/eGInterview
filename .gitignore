@@ -33,3 +33,6 @@ Thumbs.db
 /InterviewLive_clean.tsx
 /InterviewLive_utf8.tsx
 /temp.tsx
+
+
+/bootstrap/cache/*.php
