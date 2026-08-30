@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Clock, AlertCircle, CheckCircle2, Play, Sparkles } from "lucide-react";
+import { Clock, AlertCircle, CheckCircle2, Play } from "lucide-react";
 
 interface CandidateGateProps {
   interviewData: any;
@@ -110,24 +110,14 @@ export const CandidateGate: React.FC<CandidateGateProps> = ({
 
   return (
     <CardWrapper>
-      <motion.div 
-        initial={{ scale: 0 }} 
-        animate={{ scale: 1 }} 
-        transition={{ type: "spring", delay: 0.2 }}
-        className="relative w-24 h-24 mx-auto"
-      >
-        <div className="absolute inset-0 bg-blue-500/20 rounded-[2rem] blur-xl animate-pulse" />
-        <div className="relative w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-[2rem] flex items-center justify-center text-white shadow-xl border border-white/10">
-          <Sparkles className="w-10 h-10" />
-        </div>
-      </motion.div>
+
 
       <div className="space-y-3">
         <h3 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-300">
           Welcome to Your AI Interview
         </h3>
         <p className="text-sm text-slate-400 leading-relaxed px-4">
-          Hi {interviewData?.candidate_name?.split(' ')[0] || 'Candidate'}, you have applied for the <span className="text-white font-medium">{interviewData?.applied_role}</span> role.
+          Hi {interviewData?.candidate_name?.split(' ')[0] || 'Candidate'}, you applied for the <span className="text-white font-medium">{interviewData?.applied_role}</span> role.
         </p>
       </div>
 

@@ -186,10 +186,11 @@
         <div class="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/5 blur-[120px]"></div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-6 py-8 space-y-10 relative z-10">
-
-        <!-- Top Navigation -->
-        <nav class="glass-panel rounded-[2rem] px-8 py-5 flex flex-col md:flex-row items-center justify-between shadow-2xl gap-4">
+    <!-- Sticky Header Wrapper -->
+    <div class="sticky top-0 z-40 w-full bg-slate-950 pt-8 pb-4">
+        <div class="max-w-7xl mx-auto px-6">
+            <!-- Top Navigation -->
+            <nav class="glass-panel rounded-[2rem] px-8 py-5 flex flex-col md:flex-row items-center justify-between shadow-2xl gap-4">
             <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
                 <a href="{{ route('dashboard') }}" class="flex items-center gap-4 group">
                     {{-- Logo placeholder: replace src with your transparent PNG --}}
@@ -248,7 +249,11 @@
                 </div>
             </div>
         </nav>
+        </div>
+    </div>
 
+    <!-- Main Content Area -->
+    <div class="max-w-7xl mx-auto px-6 pb-8 pt-6 relative z-10 flex-1 w-full">
         <main>
             @if (isset($header))
                 <header class="mb-8 border-b border-slate-800 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

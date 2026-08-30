@@ -1,8 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Mic,
-  MicOff,
   Square,
   Bot,
   Loader2,
@@ -95,17 +93,6 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
           {/* Floating Controls */}
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 z-20">
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => setIsMuted(!isMuted)}
-                className={`flex items-center justify-center w-14 h-14 rounded-2xl transition-all shadow-xl backdrop-blur-md border border-white/10 ${
-                  isMuted 
-                    ? 'bg-rose-500/20 text-rose-500 hover:bg-rose-500/30' 
-                    : 'bg-white/10 text-white hover:bg-white/20'
-                }`}
-              >
-                {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-              </button>
-
               <button
                 onClick={stopInterview}
                 disabled={isSaving}
