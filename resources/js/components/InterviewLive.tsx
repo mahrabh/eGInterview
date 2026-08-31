@@ -24,6 +24,7 @@ interface InterviewLiveProps {
   stopInterview: () => void;
   transcript: TranscriptItem[];
   transcriptEndRef: React.RefObject<HTMLDivElement | null>;
+  wrapUpState?: string;
 }
 
 export const InterviewLive: React.FC<InterviewLiveProps> = ({
@@ -35,8 +36,10 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
   setIsMuted,
   stopInterview,
   transcript,
-  transcriptEndRef
+  transcriptEndRef,
+  wrapUpState
 }) => {
+  const isClosingDone = wrapUpState === 'closing_done';
   // Warn user before leaving if session isn't saved
   React.useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -96,7 +99,7 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
               <button
                 onClick={stopInterview}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-8 py-4 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-2xl font-bold shadow-[0_0_20px_rgba(225,29,72,0.3)] transition-all"
+                className={`flex items-center gap-2 px-8 py-4 ${isClosingDone ? 'bg-emerald-600 hover:bg-emerald-500 animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.5)] scale-105' : 'bg-rose-600 hover:bg-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.3)]'} disabled:opacity-50 text-white rounded-2xl font-bold transition-all`}
               >
                 {isSaving ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -107,7 +110,7 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
               </button>
             </div>
             <p className="text-xs text-rose-200/80 font-medium bg-black/40 px-4 py-1.5 rounded-full border border-rose-500/20">
-              Please click "End Session" when the interview is complete.
+              {isClosingDone ? 'Click "End Session" now to submit your interview.' : 'Please click "End Session" when the interview is complete.'}
             </p>
           </div>
         </div>

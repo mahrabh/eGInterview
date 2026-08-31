@@ -7,8 +7,9 @@ export default defineConfig({
         laravel({
             input: [
                 'resources/css/app.css', 
-                'resources/js/app.js', // (or app.tsx depending on your setup)
-                'resources/js/live-interview.tsx' // <-- This MUST be here
+                'resources/js/app.js',
+                'resources/js/live-interview.tsx',
+                'resources/js/loan-interview.tsx'
             ],
             refresh: true,
         }),

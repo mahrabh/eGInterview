@@ -247,8 +247,12 @@ Rules:
             abort(403, 'This interview session is not active.');
         }
 
+        if ($interview->status === 'completed') {
+            return view('interview.completed', compact('interview'));
+        }
+
         if ($interview->status === 'approved' && $interview->link_expires_at && now()->greaterThan($interview->link_expires_at)) {
-            $interview->setAttribute('session_status', 'expired');
+            return view('interview.expired');
         } elseif ($interview->status === 'approved') {
             $interview->setAttribute('window_expires_at', $interview->link_expires_at ? $interview->link_expires_at->timestamp * 1000 : 0);
         }

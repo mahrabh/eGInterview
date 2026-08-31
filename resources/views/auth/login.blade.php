@@ -53,7 +53,6 @@
                 <span class="text-white font-black text-xl">eG</span>
             </div>
             <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">eGInterview AI</h1>
-            <p class="text-[10px] sm:text-[11px] font-bold text-indigo-400 uppercase tracking-[0.2em] mt-1.5">Recruiter Terminal</p>
         </div>
 
         <div class="glass-panel rounded-3xl p-8 sm:p-10 shadow-2xl">

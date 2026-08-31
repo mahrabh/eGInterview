@@ -13,22 +13,7 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-// TEMP: fix admin password (double-hash fix)
-Route::get('/fix-admin-seed', function () {
-    try {
-        $user = \App\Models\User::updateOrCreate(
-            ['email' => 'admin@egen.com'],
-            [
-                'name' => 'Super Admin',
-                'password' => '12345678',
-                'role' => 'admin',
-            ]
-        );
-        return 'Admin user fixed. Email: admin@egen.com / Password: 12345678';
-    } catch (\Exception $e) {
-        return 'Error: ' . $e->getMessage();
-    }
-});
+
 
 /*
 |--------------------------------------------------------------------------
@@ -42,6 +27,13 @@ Route::prefix('join')->group(function () {
         ->name('interview.transcript');
     Route::post('/{identifier}/photo', [InterviewController::class, 'savePhoto'])
         ->name('interview.photo');
+    Route::get('/{identifier}/review', [InterviewController::class, 'review'])->name('interview.review.public');
+});
+
+Route::prefix('loan-interview')->group(function () {
+    Route::get('/{token}', [\App\Http\Controllers\LoanInterviewController::class, 'publicSession'])->name('loan-interview.public');
+    Route::post('/{token}/start', [\App\Http\Controllers\LoanInterviewController::class, 'start'])->name('loan-interview.start');
+    Route::post('/{token}/transcript', [\App\Http\Controllers\LoanInterviewController::class, 'saveTranscript'])->name('loan-interview.transcript');
 });
 
 /*
@@ -70,6 +62,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Loan Applications
+    Route::get('/loan-applications', [\App\Http\Controllers\LoanApplicationController::class, 'index'])->name('loan-applications.index');
+    Route::get('/loan-applications/download-template', [\App\Http\Controllers\LoanApplicationController::class, 'downloadTemplate'])->name('loan-applications.download-template');
+    Route::post('/loan-applications/import', [\App\Http\Controllers\LoanApplicationController::class, 'import'])->name('loan-applications.import');
+    Route::post('/loan-applications/{application}/generate-link', [\App\Http\Controllers\LoanApplicationController::class, 'generateLink'])->name('loan-applications.generate-link');
+    Route::get('/loan-applications/{application}/report', [\App\Http\Controllers\LoanApplicationController::class, 'report'])->name('loan-applications.report');
+    Route::get('/loan-applications/{application}/status', [\App\Http\Controllers\LoanApplicationController::class, 'status'])->name('loan-applications.status');
+    Route::post('/loan-applications/{application}/recalculate', [\App\Http\Controllers\LoanApplicationController::class, 'recalculate'])->name('loan-applications.recalculate');
+    Route::post('/loan-applications/{application}/retry-extraction', [\App\Http\Controllers\LoanApplicationController::class, 'retryExtraction'])->name('loan-applications.retry-extraction');
+    Route::delete('/loan-applications/{applicant}', [\App\Http\Controllers\LoanApplicationController::class, 'destroy'])->name('loan-applications.destroy');
 });
 
 /*
@@ -87,19 +90,8 @@ Route::middleware(['auth', 'verified', 'admin'])->group(function () {
 
     // Assign plan to a recruiter
     Route::patch('/users/{user}/assign-plan', [UserController::class, 'assignPlan'])->name('users.assign-plan');
-});
-
-
-
-
-
-Route::get('/zip-check', function () {
-    return [
-        'php_version' => PHP_VERSION,
-        'php_ini' => php_ini_loaded_file(),
-        'zip_extension' => extension_loaded('zip'),
-        'zip_class' => class_exists(\ZipArchive::class),
-    ];
+    // Loan Rules Management
+    Route::resource('loan-rules', \App\Http\Controllers\LoanProductRuleController::class);
 });
 
 require __DIR__ . '/auth.php';
