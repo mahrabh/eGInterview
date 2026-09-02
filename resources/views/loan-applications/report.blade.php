@@ -40,6 +40,54 @@
         $bindingConstraints = is_array($calcSummary['binding_constraints'] ?? null)
             ? $calcSummary['binding_constraints']
             : [];
+        $extractedFieldLabels = [
+            'loan_type' => 'Loan Type',
+            'loan_purpose' => 'Purpose',
+            'requested_amount' => 'Requested Amount',
+            'requested_tenure' => 'Requested Tenure (M)',
+            'income_source' => 'Income Source',
+            'employer_name' => 'Employer / Business',
+            'exact_monthly_income' => 'Monthly Income',
+            'other_regular_monthly_income' => 'Other Monthly Income',
+            'existing_monthly_obligations' => 'Existing EMI',
+            'asset_value' => 'Asset Value (Car/Home)',
+            'down_payment' => 'Down Payment (Car/Home)',
+        ];
+        $extracted = is_array($application->extracted_data) ? $application->extracted_data : [];
+        $scalarFallback = [
+            'loan_type' => $application->loan_type,
+            'loan_purpose' => $application->purpose,
+            'requested_amount' => $application->requested_amount,
+            'requested_tenure' => $application->tenure_months,
+            'income_source' => $application->income_source ?? $application->employment_status,
+            'employer_name' => $application->employer_name,
+            'exact_monthly_income' => $application->monthly_income,
+            'other_regular_monthly_income' => $application->other_monthly_income,
+            'existing_monthly_obligations' => $application->existing_emi,
+            'asset_value' => $application->asset_value,
+            'down_payment' => $application->down_payment,
+        ];
+        $missingExtractedFields = [];
+
+        foreach ($extractedFieldLabels as $key => $label) {
+            $fieldData = $extracted[$key] ?? [];
+            $rawValue = is_array($fieldData) ? ($fieldData['value'] ?? '') : $fieldData;
+
+            if ($rawValue === '' || $rawValue === null) {
+                $rawValue = $scalarFallback[$key] ?? '';
+            }
+
+            if ($rawValue === '' || $rawValue === null) {
+                $missingExtractedFields[] = $label;
+            }
+        }
+
+        $needsReviewState = $displayOutcome === 'Needs Review'
+            || $application->status === 'needs_review'
+            || !empty($extracted['_meta']['blocking_fields'] ?? []);
+        $showRetryExtraction = $application->submitted_at !== null
+            && $needsReviewState
+            && ($missingExtractedFields !== [] || !$application->extracted_data);
     @endphp
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -91,8 +139,23 @@
                     @endif
                 </div>
             @elseif($displayOutcome === 'Needs Review' || $application->status === 'needs_review')
-                <div class="inline-flex px-3 py-1 rounded-full text-sm font-medium border bg-amber-500/10 text-amber-400 border-amber-500/20">
-                    Needs Review
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="inline-flex px-3 py-1 rounded-full text-sm font-medium border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                        Needs Review
+                    </div>
+                    @if($showRetryExtraction)
+                        <form action="{{ route('loan-applications.retry-extraction', $application->id) }}" method="POST">
+                            @csrf
+                            <button
+                                type="submit"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200 text-xs font-semibold transition-colors"
+                                title="Re-run automatic extraction from the saved transcript"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                Re-extract
+                            </button>
+                        </form>
+                    @endif
                 </div>
                 <div class="text-sm text-gray-300 space-y-2 w-full">
                     <p class="font-medium text-amber-300">Recommendation</p>
@@ -104,6 +167,11 @@
                         </ul>
                     @else
                         <p>Some required application data is missing, unclear, or could not be confirmed automatically. Please review the extracted fields and transcript before making a decision.</p>
+                    @endif
+                    @if($showRetryExtraction && $missingExtractedFields !== [])
+                        <p class="text-xs text-amber-200/80">
+                            Missing fields detected: {{ implode(', ', $missingExtractedFields) }}. Use Re-extract to try automatic extraction again.
+                        </p>
                     @endif
                 </div>
             @elseif($application->status === 'draft')
@@ -118,8 +186,8 @@
         </div>
     </div>
 
-    @if(!$application->extracted_data && in_array($application->status, ['needs_review', 'processing'], true))
-        <div class="bg-gray-800 rounded-xl border border-gray-700/50 p-6 flex items-center justify-between">
+    @if($showRetryExtraction && $application->status === 'processing' && !$application->extracted_data)
+        <div class="bg-gray-800 rounded-xl border border-gray-700/50 p-6 flex items-center justify-between gap-4">
             <div>
                 <h3 class="text-lg font-bold text-white mb-2">Processing Incomplete</h3>
                 <p class="text-sm text-gray-400">Automatic processing could not extract application data yet.</p>
@@ -135,40 +203,31 @@
 
     <!-- Edit Extracted Values -->
     <div class="bg-gray-800 rounded-xl border border-gray-700/50 p-6">
-        <h3 class="text-lg font-bold text-white mb-4">Extracted Data & Recalculate</h3>
-        <p class="text-sm text-gray-400 mb-6">Modify the extracted values below to recalculate the eligibility.</p>
+        <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-white">Extracted Data & Recalculate</h3>
+                <p class="text-sm text-gray-400 mt-1">Modify the extracted values below to recalculate the eligibility.</p>
+            </div>
+            @if($showRetryExtraction)
+                <form action="{{ route('loan-applications.retry-extraction', $application->id) }}" method="POST">
+                    @csrf
+                    <button
+                        type="submit"
+                        class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200 text-xs font-semibold transition-colors whitespace-nowrap"
+                        title="Re-run automatic extraction from the saved transcript"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        Re-extract from Transcript
+                    </button>
+                </form>
+            @endif
+        </div>
         
         <form action="{{ route('loan-applications.recalculate', $application->id) }}" method="POST">
             @csrf
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                 @php
-                    $fields = [
-                        'loan_type' => 'Loan Type',
-                        'loan_purpose' => 'Purpose',
-                        'requested_amount' => 'Requested Amount',
-                        'requested_tenure' => 'Requested Tenure (M)',
-                        'income_source' => 'Income Source',
-                        'employer_name' => 'Employer / Business',
-                        'exact_monthly_income' => 'Monthly Income',
-                        'other_regular_monthly_income' => 'Other Monthly Income',
-                        'existing_monthly_obligations' => 'Existing EMI',
-                        'asset_value' => 'Asset Value (Car/Home)',
-                        'down_payment' => 'Down Payment (Car/Home)',
-                    ];
-                    $extracted = is_array($application->extracted_data) ? $application->extracted_data : [];
-                    $scalarFallback = [
-                        'loan_type' => $application->loan_type,
-                        'loan_purpose' => $application->purpose,
-                        'requested_amount' => $application->requested_amount,
-                        'requested_tenure' => $application->tenure_months,
-                        'income_source' => $application->income_source ?? $application->employment_status,
-                        'employer_name' => $application->employer_name,
-                        'exact_monthly_income' => $application->monthly_income,
-                        'other_regular_monthly_income' => $application->other_monthly_income,
-                        'existing_monthly_obligations' => $application->existing_emi,
-                        'asset_value' => $application->asset_value,
-                        'down_payment' => $application->down_payment,
-                    ];
+                    $fields = $extractedFieldLabels;
                 @endphp
 
                 @foreach($fields as $key => $label)

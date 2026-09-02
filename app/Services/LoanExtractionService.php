@@ -654,7 +654,7 @@ PROMPT
 
         if (preg_match('/(?:crore|koti|কোটি)/u', $value) === 1) {
             $multiplier = 10000000.0;
-        } elseif (preg_match('/(?:lakh|lac|লাখ)/u', $value) === 1) {
+        } elseif (preg_match('/(?<![\p{L}\p{N}])(?:lakh|lac|লাখ|লক্ষ)(?![\p{L}\p{N}])/u', $value) === 1) {
             $multiplier = 100000.0;
         } elseif (preg_match('/(?:thousand|hajar|হাজার|\bk\b)/u', $value) === 1) {
             $multiplier = 1000.0;
@@ -742,10 +742,45 @@ PROMPT
             'eighty' => '80',
             'ninety' => '90',
             'hundred' => '100',
+            // Bengali spoken numbers commonly used in loan interviews.
+            'শূন্য' => '0',
+            'এক' => '1',
+            'দুই' => '2',
+            'তিন' => '3',
+            'চার' => '4',
+            'পাঁচ' => '5',
+            'পাচ' => '5',
+            'ছয়' => '6',
+            'সাত' => '7',
+            'আট' => '8',
+            'নয়' => '9',
+            'দশ' => '10',
+            'এগারো' => '11',
+            'বারো' => '12',
+            'তেরো' => '13',
+            'চৌদ্দ' => '14',
+            'পনেরো' => '15',
+            'ষোল' => '16',
+            'সোল' => '16',
+            'সতেরো' => '17',
+            'আঠারো' => '18',
+            'উনিশ' => '19',
+            'বিশ' => '20',
+            'ত্রিশ' => '30',
+            'চল্লিশ' => '40',
+            'পঞ্চাশ' => '50',
+            'ষাট' => '60',
+            'সত্তর' => '70',
+            'আশি' => '80',
+            'নব্বই' => '90',
+            'শত' => '100',
+            'দেড়' => '1.5',
+            'আড়াই' => '2.5',
         ];
 
         foreach ($words as $word => $digit) {
-            $value = preg_replace('/\b' . preg_quote($word, '/') . '\b/u', $digit, $value) ?? $value;
+            $pattern = '/(?<![\p{L}\p{N}])' . preg_quote($word, '/') . '(?![\p{L}\p{N}])/u';
+            $value = preg_replace($pattern, $digit, $value) ?? $value;
         }
 
         return $value;
@@ -1000,14 +1035,10 @@ PROMPT
             ),
             'employer_name' => $this->supplementFromPairs(
                 $pairs,
-                ['employer', 'company name', 'business name', 'where do you work', 'organization', 'প্রতিষ্ঠান', 'কোম্পানি'],
+                ['employer', 'company name', 'business name', 'where do you work', 'organization', 'প্রতিষ্ঠান', 'কোম্পানি', 'ব্যবসার নাম'],
                 'text'
             ),
-            'exact_monthly_income' => $this->supplementFromPairs(
-                $pairs,
-                ['monthly income', 'net income', 'income per month', 'salary', 'মাসিক আয়', 'মাসে.*আয়'],
-                'amount'
-            ),
+            'exact_monthly_income' => $this->supplementMonthlyIncome($pairs, $turns),
             'other_regular_monthly_income' => $this->supplementFromPairs(
                 $pairs,
                 ['other income', 'additional income', 'other regular', 'অন্য.*আয়', 'অতিরিক্ত আয়'],
@@ -1038,7 +1069,127 @@ PROMPT
             $data[$field] = $supplement;
         }
 
+        if (($data['requested_amount']['value'] ?? null) === null) {
+            $requestedAmountSupplement = $this->inferRequestedAmountFromAssetAndDownPayment($data);
+
+            if ($requestedAmountSupplement !== null) {
+                $data['requested_amount'] = $requestedAmountSupplement;
+            }
+        }
+
         return $this->refreshExtractionMeta($data, $transcript);
+    }
+
+    /** @param list<array{question: string, answer: string}> $pairs */
+    /** @param list<array{speaker: string, text: string}> $turns */
+    private function supplementMonthlyIncome(array $pairs, array $turns): ?array
+    {
+        $candidates = [];
+
+        $fromPairs = $this->supplementFromPairs(
+            $pairs,
+            [
+                'monthly income',
+                'net income',
+                'income per month',
+                'salary',
+                'মাসিক.*(?:আয়|income|নিট)',
+                'মাসে.*(?:আয়|আর্ন|earn|income|টাকা)',
+                'নিট.*আয়',
+                'আয়.*মাস',
+            ],
+            'amount'
+        );
+
+        if ($fromPairs !== null) {
+            $candidates[] = $fromPairs;
+        }
+
+        $fromTurns = $this->supplementMonthlyIncomeFromApplicantTurns($turns);
+
+        if ($fromTurns !== null) {
+            $candidates[] = $fromTurns;
+        }
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        usort($candidates, static function (array $left, array $right): int {
+            return ((float) ($right['value'] ?? 0)) <=> ((float) ($left['value'] ?? 0));
+        });
+
+        return $candidates[0];
+    }
+
+    /** @param list<array{speaker: string, text: string}> $turns */
+    private function supplementMonthlyIncomeFromApplicantTurns(array $turns): ?array
+    {
+        foreach ($turns as $turn) {
+            if ($turn['speaker'] !== 'Candidate') {
+                continue;
+            }
+
+            $text = $turn['text'];
+
+            if (!preg_match('/(?:monthly|per month|মাসে|মাসিক|আয়|আর্ন|earn|earning|salary|income)/iu', $text)) {
+                continue;
+            }
+
+            if (!preg_match('/(?:\d|লাখ|লক্ষ|lakh|crore|কোটি|টাকা|hazar|হাজার|দুই|তিন|চার|পাঁচ|দশ|বিশ|পঞ্চাশ|one|two|three|ten|twenty|fifty)/iu', $text)) {
+                continue;
+            }
+
+            // Avoid treating tenure-only replies (e.g. "240 months") as income.
+            if (
+                preg_match('/(?:months?|মাস|বছর|years?)/iu', $text) === 1
+                && preg_match('/(?:আয়|আর্ন|earn|earning|salary|income|লাখ|লক্ষ|lakh|টাকা)/iu', $text) !== 1
+            ) {
+                continue;
+            }
+
+            $amount = $this->normaliseAmount($text, false);
+
+            if ($amount !== null && $amount >= 1000) {
+                return [
+                    'value' => $amount,
+                    'evidence' => mb_substr($text, 0, 200),
+                    'confidence' => 82.0,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function inferRequestedAmountFromAssetAndDownPayment(array $data): ?array
+    {
+        $loanType = $data['loan_type']['value'] ?? null;
+
+        if (!in_array($loanType, ['car', 'home'], true)) {
+            return null;
+        }
+
+        $assetValue = $data['asset_value']['value'] ?? null;
+        $downPayment = $data['down_payment']['value'] ?? null;
+
+        if (!is_numeric($assetValue) || !is_numeric($downPayment)) {
+            return null;
+        }
+
+        $assetValue = (float) $assetValue;
+        $downPayment = (float) $downPayment;
+
+        if ($assetValue <= 0 || $downPayment < 0 || $assetValue <= $downPayment) {
+            return null;
+        }
+
+        return [
+            'value' => round($assetValue - $downPayment, 2),
+            'evidence' => 'Inferred as asset value minus down payment from applicant statements.',
+            'confidence' => 82.0,
+        ];
     }
 
     /** @return list<array{speaker: string, text: string}> */
