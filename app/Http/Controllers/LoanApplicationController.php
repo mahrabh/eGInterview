@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\LoanApplicant;
 use App\Models\LoanApplication;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -17,11 +18,20 @@ class LoanApplicationController extends Controller
         Gate::authorize('viewAny', LoanApplication::class);
 
         $query = LoanApplication::with(['applicant']);
-        
+        $users = [];
+
         if (!$request->user()->isAdmin()) {
             $query->whereHas('applicant', function ($q) use ($request) {
                 $q->where('created_by', $request->user()->id);
             });
+        } else {
+            $users = User::orderBy('name')->get();
+
+            if ($request->filled('user_id')) {
+                $query->whereHas('applicant', function ($q) use ($request) {
+                    $q->where('created_by', $request->user_id);
+                });
+            }
         }
 
         if ($request->filled('search')) {
@@ -41,9 +51,9 @@ class LoanApplicationController extends Controller
             $query->where('loan_type', $request->loan_type);
         }
 
-        $applications = $query->latest()->paginate(10);
+        $applications = $query->latest()->paginate(10)->appends($request->query());
 
-        return view('loan-applications.index', compact('applications'));
+        return view('loan-applications.index', compact('applications', 'users'));
     }
 
     public function downloadTemplate()
@@ -72,12 +82,15 @@ class LoanApplicationController extends Controller
         
         $successCount = 0;
         $errorCount = 0;
+        $duplicateCount = 0;
+        $invalidCount = 0;
+        $ownerId = $request->user()->id;
 
         DB::beginTransaction();
         try {
             $reader = \Spatie\SimpleExcel\SimpleExcelReader::create($file->getRealPath(), $extension);
             
-            $reader->getRows()->each(function(array $row) use (&$successCount, &$errorCount, $request) {
+            $reader->getRows()->each(function(array $row) use (&$successCount, &$errorCount, &$duplicateCount, &$invalidCount, $ownerId) {
                 // standardize keys
                 $row = array_change_key_case($row, CASE_LOWER);
                 $name = $row['applicant_name'] ?? null;
@@ -85,6 +98,7 @@ class LoanApplicationController extends Controller
 
                 if (empty($name) || empty($phone)) {
                     $errorCount++;
+                    $invalidCount++;
                     return; // continue
                 }
                 
@@ -97,10 +111,14 @@ class LoanApplicationController extends Controller
                 $phoneHash = hash('sha256', $phone);
                 $reference = 'LA-' . strtoupper(Str::random(8));
 
-                $existing = LoanApplicant::where('phone_hash', $phoneHash)->first();
+                // Duplicates are scoped per recruiter/workspace owner, not globally.
+                $existing = LoanApplicant::where('phone_hash', $phoneHash)
+                    ->where('created_by', $ownerId)
+                    ->first();
 
                 if ($existing) {
                     $errorCount++;
+                    $duplicateCount++;
                     return;
                 }
 
@@ -108,7 +126,7 @@ class LoanApplicationController extends Controller
                     'name' => $name,
                     'phone' => $phone,
                     'application_reference' => $reference,
-                    'created_by' => $request->user()->id,
+                    'created_by' => $ownerId,
                 ]);
 
                 LoanApplication::create([
@@ -127,7 +145,14 @@ class LoanApplicationController extends Controller
 
         $message = "Import completed. Successfully imported: $successCount.";
         if ($errorCount > 0) {
-            $message .= " Skipped (duplicates/invalid): $errorCount.";
+            $parts = [];
+            if ($duplicateCount > 0) {
+                $parts[] = "duplicates in your list: $duplicateCount";
+            }
+            if ($invalidCount > 0) {
+                $parts[] = "invalid rows: $invalidCount";
+            }
+            $message .= ' Skipped (' . implode(', ', $parts) . ').';
         }
 
         return back()->with('success', $message);
@@ -174,6 +199,43 @@ class LoanApplicationController extends Controller
         $application = LoanApplication::findOrFail($id);
         Gate::authorize('view', $application);
 
+        return response()->json($this->applicationStatusPayload($application));
+    }
+
+    public function statusSnapshot(Request $request)
+    {
+        Gate::authorize('viewAny', LoanApplication::class);
+
+        $ids = $request->input('ids', []);
+        if (!is_array($ids)) {
+            $ids = explode(',', (string) $ids);
+        }
+
+        $ids = array_values(array_filter(array_map(static fn ($id) => trim((string) $id), $ids)));
+        if ($ids === []) {
+            return response()->json(['applications' => []]);
+        }
+
+        $query = LoanApplication::query()->whereIn('id', $ids);
+
+        if (!$request->user()->isAdmin()) {
+            $query->whereHas('applicant', function ($q) use ($request) {
+                $q->where('created_by', $request->user()->id);
+            });
+        }
+
+        $applications = $query->get(['id', 'status', 'outcome', 'submitted_at', 'extracted_data', 'calculation_data']);
+
+        $snapshot = [];
+        foreach ($applications as $application) {
+            $snapshot[$application->id] = $this->applicationStatusPayload($application);
+        }
+
+        return response()->json(['applications' => $snapshot]);
+    }
+
+    private function applicationStatusPayload(LoanApplication $application): array
+    {
         $hasExtractedData = is_array($application->extracted_data);
         $hasCalculationData = is_array($application->calculation_data)
             && (
@@ -183,13 +245,14 @@ class LoanApplicationController extends Controller
 
         $isReportReady = $hasExtractedData && in_array($application->status, ['assessed', 'needs_review'], true);
 
-        return response()->json([
+        return [
             'status' => $application->status,
             'outcome' => $application->outcome,
+            'submitted_at' => $application->submitted_at?->toIso8601String(),
             'has_extracted_data' => $hasExtractedData,
             'has_calculation_data' => $hasCalculationData,
             'is_report_ready' => $isReportReady,
-        ]);
+        ];
     }
 
     public function recalculate(Request $request, $id)
@@ -242,6 +305,10 @@ class LoanApplicationController extends Controller
     
     public function retryExtraction($id)
     {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(300);
+        }
+
         $application = LoanApplication::findOrFail($id);
         Gate::authorize('update', $application);
 

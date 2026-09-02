@@ -45,7 +45,7 @@
                         </div>
 
                         <span class="inline-flex px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] rounded-full {{ Auth::user()->isAdmin() ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-slate-800 border border-slate-700 text-slate-400' }}">
-                            {{ Auth::user()->isAdmin() ? 'Workspace Owner' : 'Recruiter' }}
+                            {{ Auth::user()->roleLabel() }}
                         </span>
 
                         @if(!Auth::user()->isAdmin() && Auth::user()->plan)

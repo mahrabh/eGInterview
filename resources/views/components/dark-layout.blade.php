@@ -232,7 +232,7 @@
                     <div class="flex items-center gap-3">
                         <div class="text-right hidden sm:block">
                             <p class="text-sm font-bold text-white">{{ Auth::user()->name ?? 'User' }}</p>
-                            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{{ Auth::user()->isAdmin() ? 'Workspace Owner' : 'Recruiter' }}</p>
+                            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{{ Auth::user()->roleLabel() }}</p>
                         </div>
                         <a href="{{ route('settings') }}" class="w-10 h-10 rounded-2xl {{ request()->routeIs('settings') ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500/20' }} flex items-center justify-center font-black border shadow-inner transition-all" title="Account Settings">
                             {{ substr(Auth::user()->name ?? 'U', 0, 1) }}

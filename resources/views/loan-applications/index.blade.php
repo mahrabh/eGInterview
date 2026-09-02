@@ -9,6 +9,17 @@
         <div class="flex items-center gap-4">
             <form action="{{ route('loan-applications.index') }}" method="GET" class="flex items-center gap-3">
                 <input type="text" name="search" value="{{ request('search') }}" placeholder="Search by name, ref, phone..." class="glass-panel px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-300 bg-slate-900 outline-none focus:border-indigo-500 transition-colors w-48">
+
+                @if(auth()->user()->isAdmin() && isset($users))
+                <select name="user_id" onchange="this.form.submit()" class="glass-panel px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-300 uppercase tracking-widest bg-slate-900 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
+                    <option value="">All Created Users</option>
+                    @foreach($users as $u)
+                        <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>
+                            {{ $u->name }}
+                        </option>
+                    @endforeach
+                </select>
+                @endif
                 
                 <select name="status" onchange="this.form.submit()" class="glass-panel px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-300 uppercase tracking-widest bg-slate-900 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
                     <option value="">All Statuses</option>
@@ -127,7 +138,7 @@
 
                     <td class="px-8 py-6 text-sm text-slate-300">
                         <!-- Redacted Phone Number -->
-                        {{ substr($applicant->phone ?? '00000000000', 0, 4) }}***{{ substr($applicant->phone ?? '00000000000', -2) }}
+                        {{ $applicant->masked_phone ?? 'N/A' }}
                     </td>
 
 
@@ -226,20 +237,73 @@
     </div>
 
     @php
-        $pollingApplicationIds = $applications
-            ->filter(fn ($item) => $item->status === 'processing'
-                || ($item->submitted_at && !is_array($item->calculation_data)))
-            ->pluck('id')
-            ->values();
+        $needsStatusPolling = function ($item) {
+            if ($item->status === 'processing') {
+                return true;
+            }
+
+            if ($item->submitted_at !== null && $item->outcome === null) {
+                return true;
+            }
+
+            if (
+                $item->status === 'draft'
+                && $item->public_token_hash
+                && $item->public_token_expiry
+                && $item->public_token_expiry->isFuture()
+            ) {
+                return true;
+            }
+
+            return false;
+        };
+
+        $pollingApplications = $applications->filter($needsStatusPolling)->values();
+        $pollingApplicationIds = $pollingApplications->pluck('id')->values();
+        $initialStatusSnapshot = $pollingApplications->mapWithKeys(function ($item) {
+            return [
+                $item->id => [
+                    'status' => $item->status,
+                    'outcome' => $item->outcome,
+                    'submitted_at' => $item->submitted_at?->toIso8601String(),
+                ],
+            ];
+        });
     @endphp
 
     @if($pollingApplicationIds->isNotEmpty())
     <script>
     (function () {
         const applicationIds = @json($pollingApplicationIds);
-        const statusUrlTemplate = @json(url('/loan-applications/__ID__/status'));
+        const initialSnapshot = @json($initialStatusSnapshot);
+        const snapshotUrl = @json(route('loan-applications.status-snapshot'));
         let attempts = 0;
-        const maxAttempts = 90;
+        const maxAttempts = 120;
+
+        const hasSnapshotChanged = function (current) {
+            for (const applicationId of applicationIds) {
+                const initial = initialSnapshot[applicationId];
+                const latest = current[applicationId];
+
+                if (!initial || !latest) {
+                    continue;
+                }
+
+                if (
+                    initial.status !== latest.status
+                    || initial.outcome !== latest.outcome
+                    || initial.submitted_at !== latest.submitted_at
+                ) {
+                    return true;
+                }
+
+                if (latest.is_report_ready) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
 
         const poll = async function () {
             if (attempts >= maxAttempts) {
@@ -249,26 +313,22 @@
             attempts++;
 
             try {
-                for (const applicationId of applicationIds) {
-                    const statusUrl = statusUrlTemplate.replace('__ID__', applicationId);
-                    const response = await fetch(statusUrl, {
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                        credentials: 'same-origin',
-                    });
+                const response = await fetch(`${snapshotUrl}?ids=${applicationIds.join(',')}`, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
 
-                    if (!response.ok) {
-                        continue;
-                    }
+                if (!response.ok) {
+                    return;
+                }
 
-                    const data = await response.json();
+                const data = await response.json();
 
-                    if (data.is_report_ready || (data.status !== 'processing' && data.has_extracted_data)) {
-                        window.location.reload();
-                        return;
-                    }
+                if (hasSnapshotChanged(data.applications || {})) {
+                    window.location.reload();
                 }
             } catch (error) {
                 // Ignore transient network errors and keep polling.

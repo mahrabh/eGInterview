@@ -32,6 +32,14 @@
             'Needs Review' => 'Needs Review',
             default => null,
         };
+        $assessmentReasons = collect(is_array($application->reason_codes) ? $application->reason_codes : [])
+            ->filter(fn ($reason) => is_string($reason) && trim($reason) !== '')
+            ->values();
+        $calcSummary = is_array($application->calculation_data) ? $application->calculation_data : [];
+        $eligibleAmount = $calcSummary['eligible_amount'] ?? null;
+        $bindingConstraints = is_array($calcSummary['binding_constraints'] ?? null)
+            ? $calcSummary['binding_constraints']
+            : [];
     @endphp
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -40,25 +48,63 @@
             <h3 class="text-lg font-bold text-white mb-4">Applicant Information</h3>
             <div class="space-y-3 text-sm">
                 <p><span class="text-gray-400">Name:</span> <span class="text-white">{{ $application->applicant->name }}</span></p>
-                <p><span class="text-gray-400">Phone:</span> <span class="text-white">{{ $application->applicant->phone }}</span></p>
+                <p><span class="text-gray-400">Phone:</span> <span class="text-white">{{ $application->applicant->masked_phone ?? 'N/A' }}</span></p>
                 <p><span class="text-gray-400">NID (Last 4):</span> <span class="text-white">****{{ $application->applicant->nid_last_four }}</span></p>
             </div>
         </div>
 
         <!-- Outcome -->
-        <div class="bg-gray-800 rounded-xl border border-gray-700/50 p-6 flex flex-col justify-center items-start">
-            <h3 class="text-lg font-bold text-white mb-4">Assessment Outcome</h3>
+        <div class="bg-gray-800 rounded-xl border border-gray-700/50 p-6 flex flex-col justify-start items-start space-y-4">
+            <h3 class="text-lg font-bold text-white">Assessment Outcome</h3>
             @if($displayOutcome === 'Approved')
                 <div class="inline-flex px-3 py-1 rounded-full text-sm font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                     Approved
+                </div>
+                <div class="text-sm text-gray-300 space-y-2">
+                    <p class="font-medium text-emerald-300">Recommendation</p>
+                    <p>Based on the declared income, obligations, and static loan policy, the applicant appears indicatively eligible under current rules.</p>
+                    @if($eligibleAmount !== null)
+                        <p>Indicative eligible amount: <span class="text-white font-semibold">{{ number_format((float) $eligibleAmount, 2) }} BDT</span>.</p>
+                    @endif
+                    <p class="text-gray-500 text-xs">Final approval requires document verification and authorized bank officer review.</p>
                 </div>
             @elseif($displayOutcome === 'Rejected')
                 <div class="inline-flex px-3 py-1 rounded-full text-sm font-medium border bg-rose-500/10 text-rose-400 border-rose-500/20">
                     Rejected
                 </div>
-            @elseif($displayOutcome === 'Needs Review' || $application->status === 'needs_review' || is_array($application->extracted_data))
+                <div class="text-sm text-gray-300 space-y-2 w-full">
+                    <p class="font-medium text-rose-300">Reasoning</p>
+                    @if($assessmentReasons->isNotEmpty())
+                        <ul class="list-disc list-inside space-y-1 text-gray-300">
+                            @foreach($assessmentReasons as $reason)
+                                <li>{{ $reason }}</li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <p>The requested loan does not meet one or more indicative policy checks (affordability, DBR, LTV, income, or loan amount limits).</p>
+                    @endif
+                    @if($bindingConstraints !== [])
+                        <p class="text-gray-400">Primary limiting factor: <span class="text-white">{{ implode(', ', array_map(static fn ($item) => str_replace('_', ' ', (string) $item), $bindingConstraints)) }}</span>.</p>
+                    @endif
+                    @if($eligibleAmount !== null)
+                        <p>Indicative eligible amount under current rules: <span class="text-white font-semibold">{{ number_format((float) $eligibleAmount, 2) }} BDT</span>.</p>
+                    @endif
+                </div>
+            @elseif($displayOutcome === 'Needs Review' || $application->status === 'needs_review')
                 <div class="inline-flex px-3 py-1 rounded-full text-sm font-medium border bg-amber-500/10 text-amber-400 border-amber-500/20">
                     Needs Review
+                </div>
+                <div class="text-sm text-gray-300 space-y-2 w-full">
+                    <p class="font-medium text-amber-300">Recommendation</p>
+                    @if($assessmentReasons->isNotEmpty())
+                        <ul class="list-disc list-inside space-y-1 text-gray-300">
+                            @foreach($assessmentReasons as $reason)
+                                <li>{{ $reason }}</li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <p>Some required application data is missing, unclear, or could not be confirmed automatically. Please review the extracted fields and transcript before making a decision.</p>
+                    @endif
                 </div>
             @elseif($application->status === 'draft')
                 <div class="inline-flex px-3 py-1 rounded-full text-sm font-medium border bg-slate-500/10 text-slate-400 border-slate-500/20">
@@ -193,6 +239,10 @@
                     return 'N/A';
                 }
 
+                if ($key === 'policy_classification' && is_string($val)) {
+                    return ucwords(str_replace('_', ' ', $val));
+                }
+
                 if (in_array($key, ['annual_interest_rate_percentage', 'projected_dbr_percentage', 'current_dbr_percentage', 'ltv_percentage'], true)) {
                     return number_format((float) $val, 2) . '%';
                 }
@@ -203,25 +253,28 @@
 
                 return (string) $val;
             };
+            $formatCalculationLabel = static function (string $key): string {
+                return ucwords(str_replace('_', ' ', $key));
+            };
         @endphp
         <!-- Calculation Details -->
         <div class="bg-gray-800 rounded-xl border border-gray-700/50 p-6">
             <h3 class="text-lg font-bold text-white mb-4">Calculations</h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
                 @foreach($orderedCalculationKeys as $key)
                     @if(array_key_exists($key, $calculationData))
                         @php $renderedCalculationKeys[] = $key; @endphp
-                        <div>
-                            <p class="text-xs text-gray-400 uppercase tracking-wider">{{ str_replace('_', ' ', $key) }}</p>
-                            <p class="text-lg font-bold text-white mt-1">{{ $formatCalculationValue($key, $calculationData[$key]) }}</p>
+                        <div class="min-w-0">
+                            <p class="text-xs text-gray-400 uppercase tracking-wider break-words">{{ $formatCalculationLabel($key) }}</p>
+                            <p class="text-sm md:text-base font-bold text-white mt-1 break-words leading-snug">{{ $formatCalculationValue($key, $calculationData[$key]) }}</p>
                         </div>
                     @endif
                 @endforeach
                 @foreach($calculationData as $key => $val)
                     @if($key !== 'rule_snapshot' && !in_array($key, $renderedCalculationKeys, true))
-                        <div>
-                            <p class="text-xs text-gray-400 uppercase tracking-wider">{{ str_replace('_', ' ', $key) }}</p>
-                            <p class="text-lg font-bold text-white mt-1">{{ $formatCalculationValue($key, $val) }}</p>
+                        <div class="min-w-0">
+                            <p class="text-xs text-gray-400 uppercase tracking-wider break-words">{{ $formatCalculationLabel($key) }}</p>
+                            <p class="text-sm md:text-base font-bold text-white mt-1 break-words leading-snug">{{ $formatCalculationValue($key, $val) }}</p>
                         </div>
                     @endif
                 @endforeach

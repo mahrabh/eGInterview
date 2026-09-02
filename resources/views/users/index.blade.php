@@ -48,7 +48,7 @@
                         <td class="px-8 py-6 text-sm text-slate-400 font-medium">{{ $user->email }}</td>
                         <td class="px-8 py-6">
                             <span class="px-3 py-1 inline-flex text-[10px] font-bold uppercase tracking-widest rounded-full {{ $user->isAdmin() ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-slate-800 border border-slate-700 text-slate-400' }}">
-                                {{ $user->isAdmin() ? 'Admin' : 'Recruiter' }}
+                                {{ $user->isAdmin() ? 'Admin' : $user->roleLabel() }}
                             </span>
                         </td>
                         <td class="px-8 py-6">

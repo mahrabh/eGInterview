@@ -27,7 +27,7 @@ class LoanExtractionPipelineTest extends TestCase
         parent::setUp();
 
         Config::set('services.gemini.key', 'test-gemini-key');
-        Config::set('services.gemini.extraction_model', 'gemini-2.5-flash');
+        Config::set('services.gemini.extraction_model', 'gemini-3.7-flash');
 
         $this->user = User::factory()->create(['role' => 'recruiter']);
         $this->applicant = LoanApplicant::create([
@@ -272,6 +272,8 @@ class LoanExtractionPipelineTest extends TestCase
         Http::fake([
             'generativelanguage.googleapis.com/*' => Http::sequence()
                 ->push(['error' => ['message' => 'Temporary failure']], 503)
+                ->push(['error' => ['message' => 'Temporary failure']], 503)
+                ->push(['error' => ['message' => 'Temporary failure']], 503)
                 ->push([
                     'candidates' => [[
                         'content' => ['parts' => [['text' => json_encode(array_merge(
@@ -336,6 +338,29 @@ class LoanExtractionPipelineTest extends TestCase
                 'is_report_ready' => false,
                 'has_extracted_data' => false,
             ]);
+    }
+
+    public function test_status_snapshot_returns_visible_application_states(): void
+    {
+        $draftWithLink = LoanApplication::create([
+            'loan_applicant_id' => $this->applicant->id,
+            'status' => 'draft',
+            'public_token_hash' => hash('sha256', 'draft-token'),
+            'public_token_expiry' => now()->addDay(),
+        ]);
+
+        $processing = LoanApplication::create([
+            'loan_applicant_id' => $this->applicant->id,
+            'status' => 'processing',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($this->user)
+            ->getJson('/loan-applications/status-snapshot?ids='.$draftWithLink->id.','.$processing->id)
+            ->assertOk()
+            ->assertJsonPath('applications.'.$draftWithLink->id.'.status', 'draft')
+            ->assertJsonPath('applications.'.$processing->id.'.status', 'processing')
+            ->assertJsonPath('applications.'.$processing->id.'.is_report_ready', false);
     }
 
     public function test_missing_gemini_key_does_not_call_provider_or_persist_extraction(): void

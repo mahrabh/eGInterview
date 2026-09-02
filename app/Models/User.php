@@ -40,4 +40,19 @@ class User extends Authenticatable
     {
         return $this->role === 'admin';
     }
+
+    public function roleLabel(): string
+    {
+        return match ($this->role) {
+            'admin' => 'Workspace Owner',
+            'analyst' => 'Analyst',
+            default => 'Recruiter',
+        };
+    }
+
+    /** @return list<string> */
+    public static function assignableRoles(): array
+    {
+        return ['analyst', 'recruiter'];
+    }
 }

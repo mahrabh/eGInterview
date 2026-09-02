@@ -4,8 +4,8 @@
         {{-- Page Header --}}
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
             <div>
-                <h2 class="text-4xl font-black text-white tracking-tight">Create Recruiter</h2>
-                <p class="text-slate-400 mt-2 text-sm font-medium">Add a new recruiter to your workspace with optional plan assignment.</p>
+                <h2 class="text-4xl font-black text-white tracking-tight">Create User</h2>
+                <p class="text-slate-400 mt-2 text-sm font-medium">Add a new workspace user and assign Analyst or Recruiter role.</p>
             </div>
             <a href="{{ route('users.index') }}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-bold text-xs text-slate-300 uppercase tracking-widest transition-all">
                 ← Back to Users
@@ -29,12 +29,12 @@
                             </div>
 
                             <div>
-                                <h3 class="text-xl font-black text-white tracking-tight">New Recruiter</h3>
-                                <p class="text-sm text-slate-400 mt-1">Will have recruiter-level access</p>
+                                <h3 class="text-xl font-black text-white tracking-tight">New Workspace User</h3>
+                                <p class="text-sm text-slate-400 mt-1">Assign Analyst or Recruiter access</p>
                             </div>
 
                             <span class="inline-flex px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] rounded-full bg-slate-800 border border-slate-700 text-slate-400">
-                                Recruiter Role
+                                Workspace User
                             </span>
 
                             <div class="pt-4 border-t border-slate-800/50 text-left space-y-3">
@@ -106,6 +106,17 @@
                                         class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
                                         placeholder="Re-enter password">
                                 </div>
+
+                                <div class="md:col-span-2">
+                                    <label for="role" class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Workspace Role</label>
+                                    <select id="role" name="role" required
+                                        class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium">
+                                        <option value="analyst" {{ old('role', 'analyst') === 'analyst' ? 'selected' : '' }}>Analyst</option>
+                                        <option value="recruiter" {{ old('role') === 'recruiter' ? 'selected' : '' }}>Recruiter</option>
+                                    </select>
+                                    <p class="text-[11px] text-slate-500 mt-2">This label is shown in the top-right corner when the user logs in.</p>
+                                    <x-input-error :messages="$errors->get('role')" class="mt-2 text-rose-400 text-sm font-bold" />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -138,7 +149,7 @@
                                 <a href="{{ route('users.index') }}" class="text-sm font-bold text-slate-400 hover:text-white transition-colors">Cancel</a>
                                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.4)] flex items-center gap-2">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                                    Create Recruiter
+                                    Create User
                                 </button>
                             </div>
                         </div>

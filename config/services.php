@@ -16,7 +16,11 @@ return [
 
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
-        'extraction_model' => env('GEMINI_EXTRACTION_MODEL', 'gemini-2.5-flash'),
+        'live_model' => env('GEMINI_LIVE_MODEL', 'gemini-3.1-flash-live-preview'),
+        'transcription_model' => env('GEMINI_TRANSCRIPTION_MODEL', 'gemini-3.5-transcribe-live'),
+        'extraction_model' => env('GEMINI_EXTRACTION_MODEL', 'gemini-3.7-flash'),
+        'extraction_fallback_model' => env('GEMINI_EXTRACTION_FALLBACK_MODEL', 'gemini-2.5-flash'),
+        'text_model' => env('GEMINI_TEXT_MODEL', 'gemini-3.7-flash'),
     ],
 
     'postmark' => [

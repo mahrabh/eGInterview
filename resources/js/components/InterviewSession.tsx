@@ -4,56 +4,13 @@ import { Mic, Loader2, Play, CheckCircle2, AlertCircle } from 'lucide-react';
 import { GoogleGenAI, Modality, LiveServerMessage } from "@google/genai";
 import { CandidateGate } from './CandidateGate';
 import { InterviewLive } from './InterviewLive';
-
-const WORKLET_CODE = `
-class PCMProcessor extends AudioWorkletProcessor {
-  constructor(options) {
-    super();
-    this.sourceRate = options.processorOptions.sampleRate || 48000;
-    this.targetRate = 16000;
-    this.buffer = new Float32Array(4096);
-    this.bufferIdx = 0;
-  }
-  process(inputs) {
-    const input = inputs[0];
-    if (!input || !input.length) return true;
-    const channel = input[0];
-    const ratio = this.sourceRate / this.targetRate;
-    const outputSamples = Math.floor(channel.length / ratio);
-
-    for (let i = 0; i < outputSamples; i++) {
-      const start = Math.floor(i * ratio);
-      const end = Math.floor((i + 1) * ratio);
-      let sum = 0;
-      let count = 0;
-      for (let j = start; j < end && j < channel.length; j++) {
-        sum += channel[j];
-        count++;
-      }
-      const sample = count > 0 ? sum / count : 0;
-      if (this.bufferIdx < this.buffer.length) this.buffer[this.bufferIdx++] = sample;
-      else {
-        this.flush();
-        this.buffer[this.bufferIdx++] = sample;
-      }
-    }
-
-    if (this.bufferIdx >= 512) this.flush();
-    return true;
-  }
-  flush() {
-    if (this.bufferIdx === 0) return;
-    const pcmData = new Int16Array(this.bufferIdx);
-    for (let i = 0; i < this.bufferIdx; i++) {
-      let s = Math.max(-1, Math.min(1, this.buffer[i]));
-      pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    this.port.postMessage(pcmData);
-    this.bufferIdx = 0;
-  }
-}
-registerProcessor('pcm-processor', PCMProcessor);
-`;
+import { TranscriptOrchestrator } from '../lib/transcriptOrchestrator';
+import {
+  createGeminiLiveClient,
+  fetchLiveSessionToken,
+  TranscribeLiveManager,
+} from '../lib/transcribeLiveManager';
+import { LivePcmPlayer, MicCaptureHandle, startMicCapture } from '../lib/liveAudio';
 
 function uint8ArrayToBase64(bytes: Uint8Array) {
   let binary = '';
@@ -99,13 +56,24 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<any>(null);
+  const micCaptureRef = useRef<MicCaptureHandle | null>(null);
+  const pcmPlayerRef = useRef<LivePcmPlayer | null>(null);
   const sessionRef = useRef<any>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const audioQueueRef = useRef<Int16Array[]>([]);
-  const isPlayingRef = useRef(false);
   const transcriptRef = useRef<any[]>([]);
+  const orchestratorRef = useRef(new TranscriptOrchestrator());
+  const transcribeManagerRef = useRef<TranscribeLiveManager | null>(null);
+  const usingTranscribeFallbackRef = useRef(false);
+  const isMutedRef = useRef(false);
+  const pendingApplicantTextRef = useRef('');
+  const pendingAssistantTextRef = useRef('');
+  const assistantTurnCompleteRef = useRef(false);
+  const assistantFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ASSISTANT_TRANSCRIPT_DELAY_MS = 500;
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   useEffect(() => {
     if (candidateData?.status === 'completed') {
@@ -140,9 +108,10 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({
         localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
 
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => { });
-      }
+      micCaptureRef.current?.stop();
+      micCaptureRef.current = null;
+      pcmPlayerRef.current?.stop();
+      pcmPlayerRef.current = null;
     };
   }, []);
 
@@ -175,18 +144,82 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({
     }
   };
 
+  const syncTranscript = () => {
+    const entries = orchestratorRef.current.getEntries();
+    transcriptRef.current = entries;
+    setTranscript(entries);
+  };
+
   const addTranscriptMessage = (speaker: string, text: string) => {
     if (!text || text.trim() === "") return;
 
-    const last = transcriptRef.current[transcriptRef.current.length - 1];
-
-    if (last && last.speaker === speaker) {
-      last.text += (speaker === 'assistant' ? "" : " ") + text;
-    } else {
-      transcriptRef.current.push({ speaker, text, timestamp: new Date().toISOString() });
+    if (speaker === 'assistant') {
+      orchestratorRef.current.addAssistantFinal(text.trim());
+      syncTranscript();
+      return;
     }
 
-    setTranscript([...transcriptRef.current]);
+    if (usingTranscribeFallbackRef.current) {
+      pendingApplicantTextRef.current += (pendingApplicantTextRef.current ? ' ' : '') + text.trim();
+    }
+  };
+
+  const finalizeCandidateTranscript = () => {
+    if (!usingTranscribeFallbackRef.current) {
+      return;
+    }
+
+    const text = pendingApplicantTextRef.current.trim();
+    pendingApplicantTextRef.current = '';
+
+    if (text) {
+      orchestratorRef.current.addParticipantFinal(text, 'candidate');
+      syncTranscript();
+    }
+  };
+
+  const flushAssistantTranscript = () => {
+    const text = pendingAssistantTextRef.current.trim();
+    if (!text) {
+      return;
+    }
+
+    pendingAssistantTextRef.current = '';
+    assistantTurnCompleteRef.current = false;
+    addTranscriptMessage('assistant', text);
+  };
+
+  const tryFlushAssistantTranscript = () => {
+    if (!assistantTurnCompleteRef.current) {
+      return;
+    }
+
+    if (pcmPlayerRef.current?.isPlaying()) {
+      return;
+    }
+
+    if (assistantFlushTimerRef.current) {
+      clearTimeout(assistantFlushTimerRef.current);
+    }
+
+    assistantFlushTimerRef.current = setTimeout(() => {
+      assistantFlushTimerRef.current = null;
+
+      if (!assistantTurnCompleteRef.current || pcmPlayerRef.current?.isPlaying()) {
+        return;
+      }
+
+      flushAssistantTranscript();
+    }, ASSISTANT_TRANSCRIPT_DELAY_MS);
+  };
+
+  const bufferAssistantText = (text: string) => {
+    if (!text || text.trim() === "") {
+      return;
+    }
+
+    pendingAssistantTextRef.current += text;
+    tryFlushAssistantTranscript();
   };
 
   const startAudioCapture = async () => {
@@ -194,67 +227,30 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({
       const stream = localStreamRef.current;
       if (!stream) return;
 
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      const source = audioContext.createMediaStreamSource(stream);
-
-      const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
-      await audioContext.audioWorklet.addModule(url);
-
-      const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor', {
-        processorOptions: { sampleRate: audioContext.sampleRate }
-      });
-
-      processorRef.current = workletNode;
-
-      workletNode.port.onmessage = (e: any) => {
-        if (isMuted || !sessionRef.current) return;
-        const pcmData = e.data;
-
-        sessionRef.current.sendRealtimeInput({
-          audio: {
-            mimeType: "audio/pcm;rate=16000",
-            data: uint8ArrayToBase64(new Uint8Array(pcmData.buffer))
+      micCaptureRef.current?.stop();
+      micCaptureRef.current = await startMicCapture(
+        stream,
+        (pcmData) => {
+          if (isMutedRef.current || !sessionRef.current) {
+            return;
           }
-        });
 
-        let sum = 0;
-        for (let i = 0; i < pcmData.length; i++) {
-          sum += (pcmData[i] / 32768) * (pcmData[i] / 32768);
-        }
-        setAudioLevel(Math.sqrt(sum / pcmData.length));
-      };
+          const encodedAudio = uint8ArrayToBase64(new Uint8Array(pcmData.buffer));
 
-      source.connect(workletNode);
-      workletNode.connect(audioContext.destination);
+          transcribeManagerRef.current?.sendAudio(encodedAudio);
+
+          sessionRef.current.sendRealtimeInput({
+            audio: {
+              mimeType: "audio/pcm;rate=16000",
+              data: encodedAudio,
+            },
+          });
+        },
+        (level) => setAudioLevel(level),
+      );
     } catch (err) {
       console.error("Audio capture error:", err);
     }
-  };
-
-  const playNextInQueue = () => {
-    if (audioQueueRef.current.length === 0 || !audioContextRef.current) {
-      isPlayingRef.current = false;
-      return;
-    }
-
-    isPlayingRef.current = true;
-    const pcmData = audioQueueRef.current.shift()!;
-    const float32Data = new Float32Array(pcmData.length);
-
-    for (let i = 0; i < pcmData.length; i++) {
-      float32Data[i] = pcmData[i] / 32768.0;
-    }
-
-    const buffer = audioContextRef.current.createBuffer(1, float32Data.length, 24000);
-    buffer.getChannelData(0).set(float32Data);
-
-    const source = audioContextRef.current.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContextRef.current.destination);
-    source.onended = () => playNextInQueue();
-    source.start();
   };
 
   const captureAndSavePhoto = async () => {
@@ -299,15 +295,20 @@ export const InterviewSession: React.FC<InterviewSessionProps> = ({
     setConnectionError(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const transcriptIdentifier = interviewData?.public_url || interviewData?.id || interviewData?.interview_id;
 
-      if (!apiKey || apiKey.trim() === "" || apiKey === "undefined") {
-        setConnectionError("Gemini API key is missing.");
+      if (!transcriptIdentifier) {
+        setConnectionError('Missing interview identifier.');
         setIsConnecting(false);
         return;
       }
 
-      const ai = new GoogleGenAI({ apiKey });
+      const tokenData = await fetchLiveSessionToken(`/join/${transcriptIdentifier}/live-token`);
+      const ai = createGeminiLiveClient(tokenData.token);
+
+      pcmPlayerRef.current?.stop();
+      pcmPlayerRef.current = new LivePcmPlayer(() => tryFlushAssistantTranscript());
+
       const approvedQuestions = interviewData?.approved_questions || [];
 
       if (approvedQuestions.length === 0) {
@@ -429,21 +430,21 @@ START NOW:
 Begin with greeting only, then WAIT.`;
 
       const session = await ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
+        model: tokenData.liveModel,
         config: {
-          generationConfig: {
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: "Aoede"
-                }
-              }
-            },
-            temperature: 0.2,
-            topP: 0.8
-          },
           responseModalities: [Modality.AUDIO],
           systemInstruction,
+          temperature: 0.2,
+          topP: 0.8,
+          speechConfig: {
+            languageCode: 'en-US',
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Aoede',
+              },
+            },
+          },
+          // Gemini Live rejects languageCodes; enable transcription with empty config.
           outputAudioTranscription: {},
           inputAudioTranscription: {},
         },
@@ -454,13 +455,6 @@ Begin with greeting only, then WAIT.`;
             setIsConnecting(false);
             setConnectionError(null);
             setStage('live');
-            startAudioCapture();
-
-            if (sessionRef.current) {
-              sessionRef.current.sendRealtimeInput({
-                text: "Please begin with your greeting only, wait for the candidate reply, and then continue the approved questions one by one."
-              });
-            }
           },
 
           onmessage: async (message: LiveServerMessage) => {
@@ -469,10 +463,7 @@ Begin with greeting only, then WAIT.`;
             const base64Audio = serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
               const pcmData = new Int16Array(base64ToUint8Array(base64Audio).buffer);
-              audioQueueRef.current.push(pcmData);
-              if (!isPlayingRef.current) {
-                playNextInQueue();
-              }
+              pcmPlayerRef.current?.enqueue(pcmData);
             }
 
             if (serverContent) {
@@ -483,7 +474,7 @@ Begin with greeting only, then WAIT.`;
               if (!userText) {
                 userText = serverContent.inputAudioTranscription?.text || serverContent.inputTranscription?.text || "";
               }
-              if (userText) {
+              if (userText && usingTranscribeFallbackRef.current) {
                 addTranscriptMessage('Candidate', userText);
               }
 
@@ -495,8 +486,16 @@ Begin with greeting only, then WAIT.`;
                 aiText = serverContent.outputAudioTranscription?.text || serverContent.outputTranscription?.text || "";
               }
               if (aiText) {
-                addTranscriptMessage('assistant', aiText);
+                bufferAssistantText(aiText);
               }
+            }
+
+            if (serverContent?.turnComplete) {
+              assistantTurnCompleteRef.current = true;
+              finalizeCandidateTranscript();
+              tryFlushAssistantTranscript();
+            } else if (serverContent?.modelTurn) {
+              assistantTurnCompleteRef.current = false;
             }
           },
 
@@ -526,6 +525,35 @@ Begin with greeting only, then WAIT.`;
       });
 
       sessionRef.current = session;
+      await startAudioCapture();
+
+      session.sendRealtimeInput({
+        text: 'Please begin with your greeting only, wait for the candidate reply, and then continue the approved questions one by one.',
+      });
+
+      void (async () => {
+        try {
+          const transcribeToken = await fetchLiveSessionToken(`/join/${transcriptIdentifier}/live-token`);
+          const transcribeAi = createGeminiLiveClient(transcribeToken.token);
+          transcribeManagerRef.current = new TranscribeLiveManager(
+            transcribeAi,
+            transcribeToken.transcriptionModel,
+            {
+              participantSpeaker: 'candidate',
+              languageCodes: ['en-US', 'bn-BD'],
+              context: 'recruitment',
+              orchestrator: orchestratorRef.current,
+              onTranscriptChange: () => syncTranscript(),
+              onFallbackChange: (usingFallback) => {
+                usingTranscribeFallbackRef.current = usingFallback;
+              },
+            },
+          );
+          await transcribeManagerRef.current.start();
+        } catch {
+          usingTranscribeFallbackRef.current = true;
+        }
+      })();
     } catch (err: any) {
       console.error("Critical error during Gemini connection initialization:", err);
       setIsConnecting(false);
@@ -545,10 +573,14 @@ Begin with greeting only, then WAIT.`;
     try {
       setIsSaving(true);
 
-      const finalTranscript = transcriptRef.current;
-      const transcriptText = finalTranscript
-        .map((e: any) => `${e.speaker === 'assistant' ? 'AI' : 'Candidate'}: ${e.text}`)
-        .join('\n\n');
+      await transcribeManagerRef.current?.stop();
+      transcribeManagerRef.current = null;
+
+      if (pendingAssistantTextRef.current.trim()) {
+        flushAssistantTranscript();
+      }
+
+      const transcriptText = orchestratorRef.current.toSaveFormat('Candidate');
 
       const token = document
         .querySelector('meta[name="csrf-token"]')
@@ -578,15 +610,13 @@ Begin with greeting only, then WAIT.`;
         localStreamRef.current = null;
       }
 
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => { });
-        audioContextRef.current = null;
-      }
+      micCaptureRef.current?.stop();
+      micCaptureRef.current = null;
+      pcmPlayerRef.current?.stop();
+      pcmPlayerRef.current = null;
 
       setIsConnected(false);
       setIsConnecting(false);
-      audioQueueRef.current = [];
-      isPlayingRef.current = false;
       setIsCompleted(true);
       setStage('completed');
 

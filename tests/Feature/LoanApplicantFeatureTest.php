@@ -21,7 +21,7 @@ class LoanApplicantFeatureTest extends TestCase
         parent::setUp();
 
         Config::set('services.gemini.key', 'test-gemini-key');
-        Config::set('services.gemini.extraction_model', 'gemini-2.5-flash');
+        Config::set('services.gemini.extraction_model', 'gemini-3.7-flash');
     }
 
     /** @return array{value: mixed, evidence: string, confidence: int} */
@@ -65,6 +65,24 @@ class LoanApplicantFeatureTest extends TestCase
         $response->assertDontSee('Jane');
     }
 
+    public function test_admin_can_filter_applicants_by_created_user()
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $recruiter1 = User::factory()->create(['role' => 'recruiter', 'name' => 'Recruiter One']);
+        $recruiter2 = User::factory()->create(['role' => 'recruiter', 'name' => 'Recruiter Two']);
+
+        $applicant1 = LoanApplicant::create(['name' => 'John', 'phone' => '0171', 'application_reference' => 'ref1', 'created_by' => $recruiter1->id]);
+        $applicant2 = LoanApplicant::create(['name' => 'Jane', 'phone' => '0172', 'application_reference' => 'ref2', 'created_by' => $recruiter2->id]);
+
+        LoanApplication::create(['loan_applicant_id' => $applicant1->id, 'loan_type' => 'personal', 'status' => 'draft']);
+        LoanApplication::create(['loan_applicant_id' => $applicant2->id, 'loan_type' => 'personal', 'status' => 'draft']);
+
+        $response = $this->actingAs($admin)->get('/loan-applications?user_id=' . $recruiter1->id);
+        $response->assertStatus(200);
+        $response->assertSee('John');
+        $response->assertDontSee('Jane');
+    }
+
     public function test_import_requires_file()
     {
         $user = User::factory()->create(['role' => 'recruiter']);
@@ -93,6 +111,77 @@ class LoanApplicantFeatureTest extends TestCase
         $this->assertDatabaseHas('loan_applicants', ['phone_hash' => hash('sha256', '01999999999')]);
         $this->assertDatabaseHas('loan_applicants', ['phone_hash' => hash('sha256', '01888888888')]);
         $this->assertDatabaseCount('loan_applications', 2);
+    }
+
+    public function test_import_allows_same_phone_for_different_recruiters()
+    {
+        $recruiterA = User::factory()->create(['role' => 'recruiter']);
+        $recruiterB = User::factory()->create(['role' => 'recruiter']);
+
+        LoanApplicant::create([
+            'name' => 'Existing Applicant',
+            'phone' => '01712345678',
+            'application_reference' => 'LA-EXISTING',
+            'created_by' => $recruiterA->id,
+        ]);
+
+        $csvContent = "applicant_name,phone_number\n";
+        $csvContent .= "Same Phone User,01712345678\n";
+
+        $file = UploadedFile::fake()->createWithContent('test.csv', $csvContent);
+
+        $response = $this->actingAs($recruiterB)->post('/loan-applications/import', [
+            'csv_file' => $file,
+        ]);
+
+        $response->assertSessionHas('success');
+        $this->assertDatabaseCount('loan_applicants', 2);
+        $this->assertDatabaseHas('loan_applicants', [
+            'phone_hash' => hash('sha256', '01712345678'),
+            'created_by' => $recruiterB->id,
+        ]);
+    }
+
+    public function test_phone_is_stored_masked_for_display()
+    {
+        $user = User::factory()->create(['role' => 'recruiter']);
+
+        $applicant = LoanApplicant::create([
+            'name' => 'Masked User',
+            'phone' => '01951234592',
+            'application_reference' => 'LA-MASK',
+            'created_by' => $user->id,
+        ]);
+
+        $this->assertSame('195****592', $applicant->fresh()->masked_phone);
+        $this->assertDatabaseHas('loan_applicants', [
+            'application_reference' => 'LA-MASK',
+            'phone_masked' => '195****592',
+        ]);
+    }
+
+    public function test_import_blocks_duplicate_phone_for_same_recruiter()
+    {
+        $recruiter = User::factory()->create(['role' => 'recruiter']);
+
+        LoanApplicant::create([
+            'name' => 'Existing Applicant',
+            'phone' => '01712345678',
+            'application_reference' => 'LA-EXISTING',
+            'created_by' => $recruiter->id,
+        ]);
+
+        $csvContent = "applicant_name,phone_number\n";
+        $csvContent .= "Duplicate Phone User,01712345678\n";
+
+        $file = UploadedFile::fake()->createWithContent('test.csv', $csvContent);
+
+        $response = $this->actingAs($recruiter)->post('/loan-applications/import', [
+            'csv_file' => $file,
+        ]);
+
+        $response->assertSessionHas('success');
+        $this->assertDatabaseCount('loan_applicants', 1);
     }
     
     public function test_can_delete_own_applicant()

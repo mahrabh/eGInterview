@@ -32,17 +32,18 @@ class UserController extends Controller
             'email'    => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
             'plan_id'  => 'nullable|exists:plans,id',
+            'role'     => ['required', Rule::in(User::assignableRoles())],
         ]);
 
         User::create([
             'name'     => $validated['name'],
             'email'    => $validated['email'],
             'password' => $validated['password'],
-            'role'     => 'recruiter',
+            'role'     => $validated['role'],
             'plan_id'  => $validated['plan_id'] ?? null,
         ]);
 
-        return redirect()->route('users.index')->with('success', 'Recruiter account created successfully.');
+        return redirect()->route('users.index')->with('success', 'User account created successfully.');
     }
 
     /**
@@ -70,6 +71,7 @@ class UserController extends Controller
             'name'    => 'required|string|max:255',
             'email'   => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'plan_id' => 'nullable|exists:plans,id',
+            'role'    => ['required', Rule::in(User::assignableRoles())],
         ]);
 
         if ($request->filled('password')) {
@@ -79,7 +81,7 @@ class UserController extends Controller
 
         $user->update($validated);
 
-        return redirect()->route('users.index')->with('success', 'Recruiter updated successfully.');
+        return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }
 
     /**

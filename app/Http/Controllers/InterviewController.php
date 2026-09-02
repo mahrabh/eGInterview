@@ -157,7 +157,7 @@ Rules:
             // Try primary model first only
             $result = $this->callGeminiSingleModelWithRetry(
                 $prompt,
-                'gemini-2.5-flash',
+                (string) config('services.gemini.text_model'),
                 true
             );
 
@@ -300,7 +300,7 @@ Transcript:
 
             $result = $this->callGeminiSingleModelWithRetry(
                 $prompt,
-                'gemini-2.5-flash',
+                (string) config('services.gemini.text_model'),
                 true
             );
 

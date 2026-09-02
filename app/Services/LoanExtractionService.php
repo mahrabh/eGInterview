@@ -18,7 +18,7 @@ class LoanExtractionService
 {
     private const EXTRACTION_VERSION = 'LOAN_EXTRACTION_V2';
 
-    private const DEFAULT_MODEL = 'gemini-2.5-flash';
+    private const DEFAULT_MODEL = 'gemini-3.7-flash';
 
     private const MIN_REQUIRED_CONFIDENCE = 80.0;
 
@@ -147,7 +147,6 @@ class LoanExtractionService
         string $transcript
     ): ?array {
         $apiKey = (string) config('services.gemini.key', '');
-        $model = (string) config('services.gemini.extraction_model', self::DEFAULT_MODEL);
 
         if (trim($apiKey) === '') {
             Log::error('Loan extraction cannot start because the Gemini API key is not configured.', [
@@ -157,19 +156,6 @@ class LoanExtractionService
 
             return null;
         }
-
-        if (!preg_match('/^[A-Za-z0-9._-]+$/', $model)) {
-            Log::error('Loan extraction model name is invalid.', [
-                'loan_application_id' => $application->getKey(),
-            ]);
-
-            return null;
-        }
-
-        $endpoint = sprintf(
-            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
-            $model
-        );
 
         $payload = [
             'systemInstruction' => [
@@ -195,17 +181,84 @@ class LoanExtractionService
             ],
         ];
 
+        foreach ($this->extractionModels() as $index => $model) {
+            $decoded = $this->requestGeminiExtraction(
+                $application,
+                $apiKey,
+                $model,
+                $payload,
+                $index === 0 ? 45 : 90
+            );
+
+            if ($decoded !== null) {
+                $decoded['_used_model'] = $model;
+
+                return $decoded;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Prefer the configured extraction model, then a stable fallback if it times out.
+     *
+     * @return list<string>
+     */
+    private function extractionModels(): array
+    {
+        $primary = (string) config('services.gemini.extraction_model', self::DEFAULT_MODEL);
+        $fallback = (string) config('services.gemini.extraction_fallback_model', 'gemini-2.5-flash');
+
+        $models = [];
+
+        foreach ([$primary, $fallback, 'gemini-2.5-flash'] as $model) {
+            $model = trim($model);
+
+            if ($model === '' || ! preg_match('/^[A-Za-z0-9._-]+$/', $model)) {
+                continue;
+            }
+
+            if (! in_array($model, $models, true)) {
+                $models[] = $model;
+            }
+        }
+
+        return $models;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>|null
+     */
+    private function requestGeminiExtraction(
+        LoanApplication $application,
+        string $apiKey,
+        string $model,
+        array $payload,
+        int $timeoutSeconds = 90
+    ): ?array {
+        $endpoint = sprintf(
+            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
+            $model
+        );
+
         try {
+            if (function_exists('set_time_limit')) {
+                @set_time_limit(max(180, $timeoutSeconds + 60));
+            }
+
             $response = Http::acceptJson()
                 ->asJson()
                 ->withoutVerifying()
                 ->withHeaders(['x-goog-api-key' => $apiKey])
-                ->connectTimeout(10)
-                ->timeout(75)
+                ->connectTimeout(15)
+                ->timeout($timeoutSeconds)
                 ->post($endpoint, $payload);
         } catch (ConnectionException $exception) {
-            Log::error('Gemini loan extraction connection failed.', [
+            Log::warning('Gemini loan extraction connection failed; trying next model if available.', [
                 'loan_application_id' => $application->getKey(),
+                'model' => $model,
                 'exception_class' => $exception::class,
                 'message' => $exception->getMessage(),
             ]);
@@ -214,6 +267,7 @@ class LoanExtractionService
         } catch (Throwable $exception) {
             Log::error('Gemini loan extraction request failed unexpectedly.', [
                 'loan_application_id' => $application->getKey(),
+                'model' => $model,
                 'exception_class' => $exception::class,
                 'message' => $exception->getMessage(),
             ]);
@@ -221,8 +275,8 @@ class LoanExtractionService
             return null;
         }
 
-        if (!$response->successful()) {
-            $this->logGeminiHttpFailure($application, $response);
+        if (! $response->successful()) {
+            $this->logGeminiHttpFailure($application, $response, $model);
 
             return null;
         }
@@ -233,6 +287,7 @@ class LoanExtractionService
         if ($text === '') {
             Log::error('Gemini loan extraction returned no JSON text.', [
                 'loan_application_id' => $application->getKey(),
+                'model' => $model,
                 'finish_reason' => $finishReason,
             ]);
 
@@ -249,6 +304,7 @@ class LoanExtractionService
         } catch (JsonException $exception) {
             Log::error('Gemini loan extraction returned invalid JSON.', [
                 'loan_application_id' => $application->getKey(),
+                'model' => $model,
                 'finish_reason' => $finishReason,
                 'response_characters' => strlen($text),
                 'message' => $exception->getMessage(),
@@ -257,9 +313,10 @@ class LoanExtractionService
             return null;
         }
 
-        if (!is_array($decoded)) {
+        if (! is_array($decoded)) {
             Log::error('Gemini loan extraction JSON was not an object.', [
                 'loan_application_id' => $application->getKey(),
+                'model' => $model,
                 'finish_reason' => $finishReason,
             ]);
 
@@ -411,13 +468,15 @@ PROMPT
 
     private function logGeminiHttpFailure(
         LoanApplication $application,
-        Response $response
+        Response $response,
+        ?string $model = null
     ): void {
         $errorStatus = $response->json('error.status');
         $errorMessage = $response->json('error.message');
 
         Log::error('Gemini loan extraction returned an HTTP error.', [
             'loan_application_id' => $application->getKey(),
+            'model' => $model,
             'http_status' => $response->status(),
             'provider_status' => is_scalar($errorStatus) ? (string) $errorStatus : null,
             'provider_message' => is_scalar($errorMessage)
@@ -479,7 +538,9 @@ PROMPT
         $data['needs_confirmation'] = $blockingFields;
         $data['_meta'] = [
             'extraction_version' => self::EXTRACTION_VERSION,
-            'model' => (string) config('services.gemini.extraction_model', self::DEFAULT_MODEL),
+            'model' => is_string($raw['_used_model'] ?? null) && $raw['_used_model'] !== ''
+                ? $raw['_used_model']
+                : (string) config('services.gemini.extraction_model', self::DEFAULT_MODEL),
             'extracted_at' => now()->toIso8601String(),
             'transcript_sha256' => hash('sha256', $transcript),
             'model_reported_needs_confirmation' => (bool) ($raw['needs_confirmation'] ?? false),

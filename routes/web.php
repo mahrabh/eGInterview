@@ -25,6 +25,8 @@ Route::prefix('join')->group(function () {
         ->name('interview.public');
     Route::post('/{identifier}/transcript', [InterviewController::class, 'saveTranscript'])
         ->name('interview.transcript');
+    Route::post('/{identifier}/live-token', [\App\Http\Controllers\GeminiLiveTokenController::class, 'recruitment'])
+        ->name('interview.live-token');
     Route::post('/{identifier}/photo', [InterviewController::class, 'savePhoto'])
         ->name('interview.photo');
     Route::get('/{identifier}/review', [InterviewController::class, 'review'])->name('interview.review.public');
@@ -33,8 +35,12 @@ Route::prefix('join')->group(function () {
 Route::prefix('loan-interview')->group(function () {
     Route::get('/{token}', [\App\Http\Controllers\LoanInterviewController::class, 'publicSession'])->name('loan-interview.public');
     Route::post('/{token}/start', [\App\Http\Controllers\LoanInterviewController::class, 'start'])->name('loan-interview.start');
+    Route::post('/{token}/live-token', [\App\Http\Controllers\GeminiLiveTokenController::class, 'loan'])->name('loan-interview.live-token');
     Route::post('/{token}/transcript', [\App\Http\Controllers\LoanInterviewController::class, 'saveTranscript'])->name('loan-interview.transcript');
 });
+
+Route::post('/live/transcription-fallback', [\App\Http\Controllers\GeminiLiveTokenController::class, 'logTranscriptionFallback'])
+    ->name('live.transcription-fallback');
 
 /*
 |--------------------------------------------------------------------------
@@ -66,6 +72,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Loan Applications
     Route::get('/loan-applications', [\App\Http\Controllers\LoanApplicationController::class, 'index'])->name('loan-applications.index');
     Route::get('/loan-applications/download-template', [\App\Http\Controllers\LoanApplicationController::class, 'downloadTemplate'])->name('loan-applications.download-template');
+    Route::get('/loan-applications/status-snapshot', [\App\Http\Controllers\LoanApplicationController::class, 'statusSnapshot'])->name('loan-applications.status-snapshot');
     Route::post('/loan-applications/import', [\App\Http\Controllers\LoanApplicationController::class, 'import'])->name('loan-applications.import');
     Route::post('/loan-applications/{application}/generate-link', [\App\Http\Controllers\LoanApplicationController::class, 'generateLink'])->name('loan-applications.generate-link');
     Route::get('/loan-applications/{application}/report', [\App\Http\Controllers\LoanApplicationController::class, 'report'])->name('loan-applications.report');

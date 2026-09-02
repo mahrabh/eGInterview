@@ -5,11 +5,12 @@ import {
   Bot,
   Loader2,
   MessageSquare,
-  AlertCircle,
-  Activity
+  Activity,
+  User,
 } from 'lucide-react';
 
 interface TranscriptItem {
+  id?: string;
   speaker: string;
   text: string;
 }
@@ -25,6 +26,8 @@ interface InterviewLiveProps {
   transcript: TranscriptItem[];
   transcriptEndRef: React.RefObject<HTMLDivElement | null>;
   wrapUpState?: string;
+  closingCountdown?: number | null;
+  participantLabel?: string;
 }
 
 export const InterviewLive: React.FC<InterviewLiveProps> = ({
@@ -37,7 +40,9 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
   stopInterview,
   transcript,
   transcriptEndRef,
-  wrapUpState
+  wrapUpState,
+  closingCountdown,
+  participantLabel = 'Me',
 }) => {
   const isClosingDone = wrapUpState === 'closing_done';
   // Warn user before leaving if session isn't saved
@@ -110,7 +115,11 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
               </button>
             </div>
             <p className="text-xs text-rose-200/80 font-medium bg-black/40 px-4 py-1.5 rounded-full border border-rose-500/20">
-              {isClosingDone ? 'Click "End Session" now to submit your interview.' : 'Please click "End Session" when the interview is complete.'}
+              {isClosingDone && closingCountdown !== null
+                ? `Session ending automatically in ${closingCountdown} second${closingCountdown === 1 ? '' : 's'}… You may click "End Session" now.`
+                : isClosingDone
+                  ? 'Click "End Session" now to submit your interview.'
+                  : 'Please click "End Session" when the interview is complete.'}
             </p>
           </div>
         </div>
@@ -142,7 +151,7 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 z-10 scrollbar-hide">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 z-10 scrollbar-hide">
             {transcript.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-40">
                 <div className="w-16 h-16 rounded-[2rem] bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
@@ -154,36 +163,56 @@ export const InterviewLive: React.FC<InterviewLiveProps> = ({
               </div>
             ) : (
               <AnimatePresence initial={false}>
-                {transcript.map((entry, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    className={`flex items-start gap-4 ${
-                      entry.speaker === 'assistant' ? 'flex-row' : 'flex-row-reverse'
-                    }`}
-                  >
-                    <div
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm font-bold text-sm border ${
-                        entry.speaker === 'assistant'
-                          ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
-                          : 'bg-slate-800 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      {entry.speaker === 'assistant' ? 'AI' : 'Me'}
-                    </div>
+                {transcript.map((entry, index) => {
+                  const isAssistant = entry.speaker === 'assistant';
 
-                    <div
-                      className={`max-w-[75%] p-5 rounded-[1.5rem] text-sm leading-relaxed shadow-sm ${
-                        entry.speaker === 'assistant'
-                          ? 'bg-indigo-500/10 text-indigo-50 border border-indigo-500/20 rounded-tl-sm'
-                          : 'bg-slate-800/80 text-white border border-slate-700/50 rounded-tr-sm'
+                  return (
+                    <motion.div
+                      key={entry.id ?? `transcript-${index}`}
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className={`flex items-end gap-2.5 ${
+                        isAssistant ? 'flex-row' : 'flex-row-reverse'
                       }`}
                     >
-                      {entry.text}
-                    </div>
-                  </motion.div>
-                ))}
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${
+                          isAssistant
+                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                            : 'bg-slate-800/90 text-slate-300 border-slate-700/80'
+                        }`}
+                      >
+                        {isAssistant ? (
+                          <span className="text-[10px] font-bold tracking-wide">AI</span>
+                        ) : (
+                          <User className="w-3.5 h-3.5" strokeWidth={2.25} />
+                        )}
+                      </div>
+
+                      <div
+                        className={`flex min-w-0 flex-col gap-1 ${
+                          isAssistant ? 'items-start' : 'items-end'
+                        } max-w-[calc(100%-2.75rem)]`}
+                      >
+                        {!isAssistant && (
+                          <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                            {participantLabel}
+                          </span>
+                        )}
+
+                        <div
+                          className={`inline-block w-fit max-w-full px-3.5 py-2.5 text-[13px] leading-snug break-words shadow-sm ${
+                            isAssistant
+                              ? 'rounded-2xl rounded-tl-md bg-indigo-500/10 text-indigo-50 border border-indigo-500/20'
+                              : 'rounded-2xl rounded-tr-md bg-slate-800/70 text-slate-100 border border-slate-700/40'
+                          }`}
+                        >
+                          {entry.text}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             )}
             <div ref={transcriptEndRef} />

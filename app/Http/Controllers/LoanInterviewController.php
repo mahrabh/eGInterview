@@ -119,17 +119,26 @@ class LoanInterviewController extends Controller
             return response()->json(['success' => false, 'error' => 'Server Error'], 500);
         }
 
-        // Run extraction only after the final transcript row is committed.
-        try {
-            $freshApplication = LoanApplication::findOrFail($application->id);
-            app(\App\Services\LoanExtractionService::class)->extract($freshApplication);
-        } catch (\Throwable $e) {
-            Log::error('Loan extraction failed after transcript commit.', [
-                'loan_application_id' => $application->id,
-                'exception_class' => $e::class,
-                'message' => $e->getMessage(),
-            ]);
-        }
+        $applicationId = $application->id;
+
+        // Return success immediately. Extraction can exceed PHP max_execution_time
+        // and would otherwise make the browser think the transcript save failed.
+        dispatch(function () use ($applicationId) {
+            try {
+                if (function_exists('set_time_limit')) {
+                    @set_time_limit(120);
+                }
+
+                $freshApplication = LoanApplication::findOrFail($applicationId);
+                app(\App\Services\LoanExtractionService::class)->extract($freshApplication);
+            } catch (\Throwable $e) {
+                Log::error('Loan extraction failed after transcript commit.', [
+                    'loan_application_id' => $applicationId,
+                    'exception_class' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        })->afterResponse();
 
         return response()->json(['success' => true]);
     }

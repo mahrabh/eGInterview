@@ -4,56 +4,13 @@ import { Mic, Loader2, Play, CheckCircle2, AlertCircle } from 'lucide-react';
 import { GoogleGenAI, Modality, LiveServerMessage } from "@google/genai";
 import { LoanCandidateGate } from './LoanCandidateGate';
 import { InterviewLive } from './InterviewLive';
-
-const WORKLET_CODE = `
-class PCMProcessor extends AudioWorkletProcessor {
-  constructor(options) {
-    super();
-    this.sourceRate = options.processorOptions.sampleRate || 48000;
-    this.targetRate = 16000;
-    this.buffer = new Float32Array(4096);
-    this.bufferIdx = 0;
-  }
-  process(inputs) {
-    const input = inputs[0];
-    if (!input || !input.length) return true;
-    const channel = input[0];
-    const ratio = this.sourceRate / this.targetRate;
-    const outputSamples = Math.floor(channel.length / ratio);
-
-    for (let i = 0; i < outputSamples; i++) {
-      const start = Math.floor(i * ratio);
-      const end = Math.floor((i + 1) * ratio);
-      let sum = 0;
-      let count = 0;
-      for (let j = start; j < end && j < channel.length; j++) {
-        sum += channel[j];
-        count++;
-      }
-      const sample = count > 0 ? sum / count : 0;
-      if (this.bufferIdx < this.buffer.length) this.buffer[this.bufferIdx++] = sample;
-      else {
-        this.flush();
-        this.buffer[this.bufferIdx++] = sample;
-      }
-    }
-
-    if (this.bufferIdx >= 512) this.flush();
-    return true;
-  }
-  flush() {
-    if (this.bufferIdx === 0) return;
-    const pcmData = new Int16Array(this.bufferIdx);
-    for (let i = 0; i < this.bufferIdx; i++) {
-      let s = Math.max(-1, Math.min(1, this.buffer[i]));
-      pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    this.port.postMessage(pcmData);
-    this.bufferIdx = 0;
-  }
-}
-registerProcessor('pcm-processor', PCMProcessor);
-`;
+import { TranscriptOrchestrator } from '../lib/transcriptOrchestrator';
+import {
+  createGeminiLiveClient,
+  fetchLiveSessionToken,
+  TranscribeLiveManager,
+} from '../lib/transcribeLiveManager';
+import { LivePcmPlayer, MicCaptureHandle, startMicCapture } from '../lib/liveAudio';
 
 function uint8ArrayToBase64(bytes: Uint8Array) {
   let binary = '';
@@ -72,6 +29,68 @@ function base64ToUint8Array(b64: string) {
   return bytes;
 }
 
+const CLOSING_MESSAGE_BN = "আপনার সময় ও প্রয়োজনীয় তথ্য দেওয়ার জন্য ধন্যবাদ। সাক্ষাৎকারটি সম্পন্ন করতে অনুগ্রহ করে 'End Session' বাটনে ক্লিক করুন।";
+const CLOSING_MESSAGE_EN = "Thank you for your time and for providing the required information. Please click the End Session button to complete the interview.";
+
+const ASSISTANT_TURN_SPLIT_PATTERN = /(?<=[।!?])\s*(?=ডাউন পেমেন্ট|বর্তমানে আপনার|আপনার (?:বাড়ির|বাড়ির|গাড়ির|মাসিক|অন্য|ব্যবসার)|আপনি (?:কী|কি|মোট)|লোনটি|এবার বলুন|আচ্ছা,)/u;
+
+function extractClosingSegment(text: string): { remainder: string; closing: string | null } {
+  const bnIdx = text.indexOf('আপনার সম');
+  const enIdx = text.search(/Thank you for your time/i);
+  let idx = -1;
+
+  if (bnIdx >= 0 && enIdx >= 0) {
+    idx = Math.min(bnIdx, enIdx);
+  } else if (bnIdx >= 0) {
+    idx = bnIdx;
+  } else if (enIdx >= 0) {
+    idx = enIdx;
+  }
+
+  if (idx < 0) {
+    return { remainder: text, closing: null };
+  }
+
+  const remainder = text.slice(0, idx).trim();
+  const closing = bnIdx >= 0 && (enIdx < 0 || bnIdx <= enIdx) ? CLOSING_MESSAGE_BN : CLOSING_MESSAGE_EN;
+
+  return { remainder, closing };
+}
+
+function splitAssistantMonologue(text: string): string[] {
+  const { remainder, closing } = extractClosingSegment(text);
+  const turns: string[] = [];
+
+  if (remainder) {
+    const parts = remainder
+      .split(ASSISTANT_TURN_SPLIT_PATTERN)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length > 1) {
+      turns.push(...parts);
+    } else {
+      const ackSplit = /(?<=[।])\s*(?=ডাউন পেমেন্ট|এবার বলুন|আপনার (?:বাড়ির|বাড়ির))/u;
+      const ackParts = remainder.split(ackSplit).map((part) => part.trim()).filter(Boolean);
+      turns.push(...(ackParts.length > 1 ? ackParts : [remainder]));
+    }
+  }
+
+  if (closing) {
+    turns.push(closing);
+  }
+
+  return turns;
+}
+
+interface TranscriptEntry {
+  id: string;
+  speaker: string;
+  text: string;
+  timestamp: number;
+  sequence: number;
+}
+
 interface LoanInterviewSessionProps {
   candidateData: any;
   onComplete?: () => void;
@@ -86,7 +105,7 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [transcript, setTranscript] = useState<{ speaker: string; text: string }[]>([]);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [audioLevel, setAudioLevel] = useState(0);
   const [isCompleted, setIsCompleted] = useState(candidateData?.is_submitted);
   const [hasEverConnected, setHasEverConnected] = useState(false);
@@ -98,28 +117,50 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
   const [hasAgreed, setHasAgreed] = useState(false);
   const [wrapUpState, setWrapUpState] = useState<'active' | 'closing' | 'closing_done' | 'saving' | 'submitted'>('active');
   const wrapUpStateRef = useRef(wrapUpState);
+  const isMutedRef = useRef(false);
   const timeNudgeTimerRef = useRef<any>(null);
   const hardLimitTimerRef = useRef<any>(null);
   const closingRequestedRef = useRef(false);
   const closingDeliveredRef = useRef(false);
+  const intentionalCloseRef = useRef(false);
+  const prematureClosingNudgeRef = useRef(false);
+  const autoEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closingCountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const urgentNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [closingCountdown, setClosingCountdown] = useState<number | null>(null);
+
+  const CLOSING_AUTO_END_MS = 5000;
 
   const INTERVIEW_TIME_NUDGE_MS = 150000; // 2:30 — remind AI to finish remaining mandatory questions
-  const INTERVIEW_HARD_LIMIT_MS = 180000; // 3:00 — ask AI to give closing message only
+  const INTERVIEW_URGENT_NUDGE_MS = 240000; // 4:00 — urgent reminder for missing checklist items
+  const INTERVIEW_LONG_NUDGE_MS = 360000; // 6:00 — long-running interview nudge (never force close)
+
+  const QUESTION_MARKERS = /[?？]|বলুন|জানাবেন|বলবেন|কত টাকা|কি ধরণ|থাকলে পরিমাণ|না থাকলে|ডাউন পেমেন্ট|মাসিক আয়|কিস্তি/i;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<any>(null);
+  const micCaptureRef = useRef<MicCaptureHandle | null>(null);
+  const pcmPlayerRef = useRef<LivePcmPlayer | null>(null);
   const sessionRef = useRef<any>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const audioQueueRef = useRef<Int16Array[]>([]);
-  const isPlayingRef = useRef(false);
-  const transcriptRef = useRef<any[]>([]);
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
+  const orchestratorRef = useRef(new TranscriptOrchestrator());
+  const transcribeManagerRef = useRef<TranscribeLiveManager | null>(null);
+  const usingTranscribeFallbackRef = useRef(false);
   const isTurnCompleteRef = useRef(true);
+  const pendingAssistantTextRef = useRef('');
+  const pendingApplicantTextRef = useRef('');
+  const assistantTurnCompleteRef = useRef(false);
+  const assistantFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ASSISTANT_TRANSCRIPT_DELAY_MS = 500;
 
   useEffect(() => {
     wrapUpStateRef.current = wrapUpState;
   }, [wrapUpState]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   useEffect(() => {
     if (candidateData?.is_submitted) {
@@ -143,10 +184,150 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcript.length]);
 
+  const isClosingMessage = (text: string): boolean => {
+    return /End Session|সাক্ষাৎকারটি সম্পন্ন|সম্পন্ন করতে অনুগ্রহ করে/i.test(text);
+  };
+
+  const isStandaloneClosingMessage = (text: string): boolean => {
+    if (!isClosingMessage(text)) {
+      return false;
+    }
+
+    const closingMatch = text.match(/End Session|সাক্ষাৎকারটি সম্পন্ন|সম্পন্ন করতে অনুগ্রহ করে/i);
+    if (!closingMatch || closingMatch.index === undefined) {
+      return false;
+    }
+
+    const beforeClosing = text.slice(0, closingMatch.index).trim();
+    if (!beforeClosing) {
+      return true;
+    }
+
+    return !QUESTION_MARKERS.test(beforeClosing);
+  };
+
+  const hasApplicantResponseAfterLastQuestion = (
+    entries: { speaker: string; text: string }[]
+  ): boolean => {
+    let lastQuestionIdx = -1;
+
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].speaker === 'assistant' && QUESTION_MARKERS.test(entries[i].text)) {
+        lastQuestionIdx = i;
+        break;
+      }
+    }
+
+    if (lastQuestionIdx < 0) {
+      return true;
+    }
+
+    for (let i = lastQuestionIdx + 1; i < entries.length; i++) {
+      if (entries[i].speaker === 'applicant' && entries[i].text.trim()) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const canProceedToClosing = (text: string): boolean => {
+    return isStandaloneClosingMessage(text)
+      && hasApplicantResponseAfterLastQuestion(transcriptRef.current);
+  };
+
+  const nudgePrematureClosing = () => {
+    if (prematureClosingNudgeRef.current || !sessionRef.current || closingDeliveredRef.current) {
+      return;
+    }
+
+    prematureClosingNudgeRef.current = true;
+    sessionRef.current.sendRealtimeInput({
+      text: "STOP closing. The applicant has NOT answered your last question yet, OR you combined a question with the closing message. Ask the next missing mandatory checklist item as ONE question only, then STOP and WAIT for the applicant's answer. Do NOT give the closing message until every mandatory item is clearly answered."
+    });
+
+    window.setTimeout(() => {
+      prematureClosingNudgeRef.current = false;
+    }, 15000);
+  };
+
+  const resetClosingState = () => {
+    closingRequestedRef.current = false;
+    wrapUpStateRef.current = 'active';
+    setWrapUpState('active');
+  };
+
+  const nudgeIncompleteChecklist = (message: string) => {
+    if (!sessionRef.current || closingRequestedRef.current || closingDeliveredRef.current) {
+      return;
+    }
+
+    sessionRef.current.sendRealtimeInput({ text: message });
+  };
+
+  const clearClosingTimers = () => {
+    if (autoEndTimerRef.current) {
+      clearTimeout(autoEndTimerRef.current);
+      autoEndTimerRef.current = null;
+    }
+    if (closingCountdownIntervalRef.current) {
+      clearInterval(closingCountdownIntervalRef.current);
+      closingCountdownIntervalRef.current = null;
+    }
+    setClosingCountdown(null);
+  };
+
+  const finalizeClosingPhase = () => {
+    if (closingDeliveredRef.current) return;
+
+    const closingCandidate = pendingAssistantTextRef.current.trim();
+    if (!canProceedToClosing(closingCandidate)) {
+      flushAssistantTranscript({ allowClosing: false });
+      resetClosingState();
+      nudgePrematureClosing();
+      return;
+    }
+
+    if (assistantFlushTimerRef.current) {
+      clearTimeout(assistantFlushTimerRef.current);
+      assistantFlushTimerRef.current = null;
+    }
+    flushAssistantTranscript();
+
+    closingDeliveredRef.current = true;
+    wrapUpStateRef.current = 'closing_done';
+    setWrapUpState('closing_done');
+    setIsMuted(true);
+
+    pcmPlayerRef.current?.clear();
+    pendingAssistantTextRef.current = '';
+
+    if (sessionRef.current) {
+      intentionalCloseRef.current = true;
+      try {
+        sessionRef.current.close();
+      } catch (_) { }
+      sessionRef.current = null;
+    }
+
+    const seconds = CLOSING_AUTO_END_MS / 1000;
+    setClosingCountdown(seconds);
+    closingCountdownIntervalRef.current = setInterval(() => {
+      setClosingCountdown((prev) => (prev !== null && prev > 1 ? prev - 1 : prev));
+    }, 1000);
+
+    autoEndTimerRef.current = setTimeout(() => {
+      clearClosingTimers();
+      stopInterview();
+    }, CLOSING_AUTO_END_MS);
+  };
+
   useEffect(() => {
     return () => {
       if (timeNudgeTimerRef.current) clearTimeout(timeNudgeTimerRef.current);
+      if (urgentNudgeTimerRef.current) clearTimeout(urgentNudgeTimerRef.current);
       if (hardLimitTimerRef.current) clearTimeout(hardLimitTimerRef.current);
+      clearClosingTimers();
 
       if (sessionRef.current) {
         try {
@@ -158,9 +339,10 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
         localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
 
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => { });
-      }
+      micCaptureRef.current?.stop();
+      micCaptureRef.current = null;
+      pcmPlayerRef.current?.stop();
+      pcmPlayerRef.current = null;
     };
   }, []);
 
@@ -195,25 +377,127 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
 
   const requestClosingMessage = () => {
     if (closingRequestedRef.current || !sessionRef.current) return;
+
+    if (!hasApplicantResponseAfterLastQuestion(transcriptRef.current)) {
+      nudgePrematureClosing();
+      return;
+    }
+
     closingRequestedRef.current = true;
     setWrapUpState('closing');
     sessionRef.current.sendRealtimeInput({
-      text: "Give your final closing message now exactly as specified in STEP 4. Do not ask any new questions. Wait for the candidate to click End Session."
+      text: "All mandatory checklist items appear complete. Give ONLY the STEP 3 closing message once in the applicant's language — no other sentences, no questions. After saying it, remain completely silent."
     });
   };
 
-  const addTranscriptMessage = (speaker: string, text: string) => {
-    if (!text || text.trim() === "") return;
+  const syncTranscript = () => {
+    const entries = orchestratorRef.current.getEntries();
+    transcriptRef.current = entries;
+    setTranscript(entries);
+  };
 
-    const last = transcriptRef.current[transcriptRef.current.length - 1];
-
-    if (last && last.speaker === speaker) {
-      last.text += (speaker === 'assistant' ? "" : " ") + text;
-    } else {
-      transcriptRef.current.push({ speaker, text, timestamp: new Date().toISOString() });
+  const pushTranscriptEntry = (speaker: 'assistant', text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
     }
 
-    setTranscript([...transcriptRef.current]);
+    orchestratorRef.current.addAssistantFinal(trimmed);
+    syncTranscript();
+  };
+
+  const finalizeApplicantTranscript = () => {
+    if (!usingTranscribeFallbackRef.current) {
+      return;
+    }
+
+    const text = pendingApplicantTextRef.current.trim();
+    pendingApplicantTextRef.current = '';
+
+    if (text) {
+      orchestratorRef.current.addParticipantFinal(text, 'applicant');
+      syncTranscript();
+    }
+  };
+
+  const bufferApplicantText = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    pendingApplicantTextRef.current += (pendingApplicantTextRef.current ? ' ' : '') + trimmed;
+  };
+
+  const flushAssistantTranscript = (options?: { allowClosing?: boolean }) => {
+    const text = pendingAssistantTextRef.current.trim();
+    if (!text) {
+      return;
+    }
+
+    pendingAssistantTextRef.current = '';
+    assistantTurnCompleteRef.current = false;
+
+    const allowClosing = options?.allowClosing ?? canProceedToClosing(text);
+    let turns = splitAssistantMonologue(text);
+
+    if (!allowClosing) {
+      turns = turns.filter((turn) => !isClosingMessage(turn));
+    }
+
+    for (const turn of turns) {
+      pushTranscriptEntry('assistant', turn);
+    }
+  };
+
+  const tryFlushAssistantTranscript = () => {
+    if (!assistantTurnCompleteRef.current) {
+      return;
+    }
+
+    if (pcmPlayerRef.current?.isPlaying()) {
+      return;
+    }
+
+    if (assistantFlushTimerRef.current) {
+      clearTimeout(assistantFlushTimerRef.current);
+    }
+
+    assistantFlushTimerRef.current = setTimeout(() => {
+      assistantFlushTimerRef.current = null;
+
+      if (!assistantTurnCompleteRef.current || pcmPlayerRef.current?.isPlaying()) {
+        return;
+      }
+
+      flushAssistantTranscript();
+    }, ASSISTANT_TRANSCRIPT_DELAY_MS);
+  };
+
+  const bufferAssistantText = (text: string) => {
+    if (!text || text.trim() === "" || closingDeliveredRef.current) {
+      return;
+    }
+
+    if (isTurnCompleteRef.current && pendingAssistantTextRef.current.trim()) {
+      flushAssistantTranscript();
+    }
+
+    isTurnCompleteRef.current = false;
+    assistantTurnCompleteRef.current = false;
+    pendingAssistantTextRef.current += text;
+
+    if (!closingRequestedRef.current && isClosingMessage(pendingAssistantTextRef.current)) {
+      if (!canProceedToClosing(pendingAssistantTextRef.current)) {
+        nudgePrematureClosing();
+      } else {
+        closingRequestedRef.current = true;
+        wrapUpStateRef.current = 'closing';
+        setWrapUpState('closing');
+      }
+    }
+
+    tryFlushAssistantTranscript();
   };
 
   const startAudioCapture = async () => {
@@ -221,78 +505,50 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
       const stream = localStreamRef.current;
       if (!stream) return;
 
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      const source = audioContext.createMediaStreamSource(stream);
-
-      const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
-      await audioContext.audioWorklet.addModule(url);
-
-      const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor', {
-        processorOptions: { sampleRate: audioContext.sampleRate }
-      });
-
-      processorRef.current = workletNode;
-
-      workletNode.port.onmessage = (e: any) => {
-        if (isMuted || !sessionRef.current || wrapUpStateRef.current === 'closing_done' || wrapUpStateRef.current === 'saving' || wrapUpStateRef.current === 'submitted') return;
-        const pcmData = e.data;
-
-        sessionRef.current.sendRealtimeInput({
-          audio: {
-            mimeType: "audio/pcm;rate=16000",
-            data: uint8ArrayToBase64(new Uint8Array(pcmData.buffer))
+      micCaptureRef.current?.stop();
+      micCaptureRef.current = await startMicCapture(
+        stream,
+        (pcmData) => {
+          if (
+            isMutedRef.current ||
+            !sessionRef.current ||
+            closingDeliveredRef.current ||
+            wrapUpStateRef.current === 'closing' ||
+            wrapUpStateRef.current === 'closing_done' ||
+            wrapUpStateRef.current === 'saving' ||
+            wrapUpStateRef.current === 'submitted'
+          ) {
+            return;
           }
-        });
 
-        let sum = 0;
-        for (let i = 0; i < pcmData.length; i++) {
-          sum += (pcmData[i] / 32768) * (pcmData[i] / 32768);
-        }
-        setAudioLevel(Math.sqrt(sum / pcmData.length));
-      };
+          const base64Pcm = uint8ArrayToBase64(new Uint8Array(pcmData.buffer));
 
-      source.connect(workletNode);
-      workletNode.connect(audioContext.destination);
+          sessionRef.current.sendRealtimeInput({
+            audio: {
+              mimeType: "audio/pcm;rate=16000",
+              data: base64Pcm,
+            },
+          });
+
+          transcribeManagerRef.current?.sendAudio(base64Pcm);
+        },
+        (level) => setAudioLevel(level),
+      );
     } catch (err) {
       console.error("Audio capture error:", err);
     }
   };
 
-  const playNextInQueue = () => {
-    if (audioQueueRef.current.length === 0 || !audioContextRef.current) {
-      isPlayingRef.current = false;
-      
-      // If we are in closing state and AI turn is complete, trigger stop
-      if (wrapUpStateRef.current === 'closing' && isTurnCompleteRef.current && !closingDeliveredRef.current) {
-          closingDeliveredRef.current = true;
-          setWrapUpState('closing_done');
-          
-          if (sessionRef.current) {
-              sessionRef.current.sendRealtimeInput({ audioStreamEnd: true });
-          }
-          // Never auto-submit — the applicant must click End Session.
-      }
-      return;
+  const handleAssistantPlaybackIdle = () => {
+    tryFlushAssistantTranscript();
+
+    if (
+      (wrapUpStateRef.current === 'closing' || closingRequestedRef.current) &&
+      isTurnCompleteRef.current &&
+      !closingDeliveredRef.current
+    ) {
+      finalizeClosingPhase();
     }
-
-    isPlayingRef.current = true;
-    const pcmData = audioQueueRef.current.shift()!;
-    const float32Data = new Float32Array(pcmData.length);
-
-    for (let i = 0; i < pcmData.length; i++) {
-      float32Data[i] = pcmData[i] / 32768.0;
-    }
-
-    const buffer = audioContextRef.current.createBuffer(1, float32Data.length, 24000);
-    buffer.getChannelData(0).set(float32Data);
-
-    const source = audioContextRef.current.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContextRef.current.destination);
-    source.onended = () => playNextInQueue();
-    source.start();
   };
 
   const startLiveInterview = async () => {
@@ -304,38 +560,55 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
     setConnectionError(null);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const transcriptIdentifier = interviewData?.public_url;
 
-      if (!apiKey || apiKey.trim() === "" || apiKey === "undefined") {
-        setConnectionError("Gemini API key is missing.");
+      if (!transcriptIdentifier) {
+        setConnectionError("Missing interview identifier.");
         setIsConnecting(false);
         return;
       }
 
-      const ai = new GoogleGenAI({ apiKey });
+      const tokenData = await fetchLiveSessionToken(`/loan-interview/${transcriptIdentifier}/live-token`);
+      const ai = createGeminiLiveClient(tokenData.token);
+
+      pcmPlayerRef.current?.stop();
+      pcmPlayerRef.current = new LivePcmPlayer(handleAssistantPlaybackIdle);
+
+      const applicantName = (interviewData?.candidate_name || 'Applicant').trim();
+      const applicantFirstName = applicantName.split(/\s+/)[0] || applicantName;
 
       const systemInstruction = `CRITICAL LANGUAGE RULE:
 You are allowed to speak ONLY in:
 - English
 - Bengali (Bangla, native script)
 
-If the candidate speaks Bengali:
+If the applicant speaks Bengali:
 - You MUST respond in Bengali script (বাংলা)
 - NEVER use Banglish (romanized Bangla)
-- NEVER switch to Hindi or Urdu
+- NEVER switch to Hindi or Urdu in your replies
+
+If the applicant mixes Hindi/English with Bengali, understand their answer but reply in Bengali or English only. Politely confirm any numbers they gave.
+
+------------------------------------------------------------
+
+THIS IS A LIVE VOICE INTERVIEW — NOT A FORM:
+- NEVER say "write", "type", "fill in", "enter", or Bengali equivalents like "লিখুন", "টাইপ করুন", "পূরণ করুন"
+- ALWAYS say "tell me", "say", "let me know", or Bengali "বলুন", "জানান", "উত্তর দিন"
+- For zero/none answers say: "না থাকলে শূন্য বলুন" or "নেই বললেই হবে" — NEVER "শূন্য লিখুন"
 
 ------------------------------------------------------------
 
 IDENTITY:
-You are a professional Bank Loan Agent AI helping the candidate complete their loan application securely.
+You are a professional Bank Loan Agent AI helping the applicant complete their loan application securely.
 
-CANDIDATE INFO:
-Name: ${interviewData?.candidate_name}
+APPLICANT INFO (use in greeting):
+Full name: ${applicantName}
+First name for greeting: ${applicantFirstName}
 
 ------------------------------------------------------------
 
 MANDATORY DATA CHECKLIST (track internally — do NOT read this list aloud):
-You MUST collect every item below before the closing message. Ask ONE question at a time, then STOP and WAIT.
+Collect every item below before closing. Ask EXACTLY ONE question per turn, then STOP and WAIT.
 
 ALWAYS REQUIRED:
 1. Loan type — Personal, Car, or Home
@@ -343,75 +616,103 @@ ALWAYS REQUIRED:
 3. Requested loan amount — exact BDT figure (no ranges)
 4. Requested tenure — exact number of MONTHS (convert years to months if needed)
 5. Income source — salaried, business, self-employed, etc.
-6. Employer or business name
-7. Net monthly income — exact BDT monthly amount (not annual)
-8. Other regular monthly income — exact BDT amount, or confirm zero/none
-9. Existing monthly loan EMI and obligations — exact BDT amount, or confirm zero/none
+6. Employer or business name (separate question — do NOT combine with income)
+7. Net monthly income — exact BDT monthly amount (separate question — do NOT combine with employer)
+8. Other regular monthly income — exact BDT amount, or confirm none/zero
+9. Existing monthly loan EMI and obligations — exact BDT amount, or confirm none/zero
 
 ONLY IF LOAN TYPE IS CAR OR HOME (skip for Personal):
-10. Asset value — vehicle price or property value in BDT
-11. Down payment or equity available — exact BDT amount, or confirm zero/none
+10. Asset value — vehicle price or property value in BDT (ONE question only)
+11. Down payment or equity available — exact BDT amount, or confirm none/zero (ONE separate question — never combine with item 10)
 
 ------------------------------------------------------------
 
 INTERVIEW FLOW
 
-STEP 1 — GREETING
-- Greet politely, introduce yourself briefly
-- Ask if they are ready to begin
+STEP 1 — GREETING (first turn only — STRICT ORDER)
+- Your FIRST spoken words MUST be English: "Hello ${applicantFirstName},"
+- Then continue with a short professional introduction and ask if they are ready
+- Exact preferred first turn:
+  "Hello ${applicantFirstName}, I am a professional Bank Loan Agent AI. I am here to help you complete your loan application securely. Are you ready to begin?"
+- Do NOT open with নমস্কার, আসসালামু আলাইকুম, or any non-English first word
+- After the applicant replies, match their language (Bengali script or English) for later turns
+- You MUST use the applicant's name (${applicantFirstName}) right after Hello
+- Ask readiness ONCE only. If they already said yes/ready/প্রস্তুত, do NOT ask again — move to loan type
 - STOP and WAIT for their answer
 
-STEP 2 — QUESTIONS (one at a time)
+STEP 2 — QUESTIONS (strictly one at a time)
 - Work through the mandatory checklist in a natural order
-- Skip any item the candidate already answered clearly
-- If the candidate is silent or did not answer: repeat the SAME question once, then wait patiently. Do NOT end the interview and do NOT tell them to click End Session
-- If they say "I don't know": ask once more simply; if still unknown, accept that and move to the next item
-- Ask follow-up questions ONLY when an answer is ambiguous, contradictory, or a range (e.g. "20-30 thousand", "2 or 3 years"). One short clarification only — then move on
-- Do NOT ask unnecessary or duplicate follow-up questions
+- Skip any item the applicant already answered clearly
+- NEVER ask two checklist items in the same turn (e.g. do NOT ask asset price and down payment together)
+- NEVER ask a new question in the same turn as acknowledging a previous answer — acknowledge briefly, STOP, then ask the NEXT item in your following turn
+- NEVER repeat a question the applicant already answered clearly
+- If you asked a question, you MUST wait for the applicant's spoken answer before asking anything else or closing
+- If the applicant is silent: repeat the SAME question once only, then wait. Do NOT end the interview
+- If they say "I don't know": ask once more simply; if still unknown, record as unknown and move on
+- Ask follow-up ONLY when an answer is ambiguous, contradictory, or a range. One short clarification only
+- For car/home loans: asset value and down payment are SEPARATE turns — never skip down payment
 - Do NOT calculate EMI, DBR, LTV, eligibility, approval, or loan limits
 - If asked "How much loan can I get?": say EXACTLY "I am collecting your application information. An indicative result will be calculated afterward using the bank's approved lending rules and reviewed by an authorized bank officer."
 
-STEP 3 — WHEN CHECKLIST IS COMPLETE
-- Give ONE brief confirmation such as "Thank you, I have all the information I need."
-- Then give the closing message from STEP 4
-- Do NOT ask any new questions after the checklist is complete
+BENGALI QUESTION EXAMPLES (voice-safe phrasing):
+- Other income: "আপনার অন্য কোনো নিয়মিত মাসিক আয় আছে কি? থাকলে পরিমাণটি বলুন। না থাকলে 'নেই' বলুন।"
+- Existing EMI: "বর্তমানে আপনার কোনো মাসিক কিস্তি বা ঋণের বাধ্যবাধকতা আছে কি? থাকলে পরিমাণটি বলুন। না থাকলে 'নেই' বলুন।"
+- Asset value (car/home): "গাড়ির/সম্পত্তির আনুমানিক মূল্য কত টাকা?"
+- Down payment (next turn only): "ডাউন পেমেন্ট হিসেবে আপনি কত টাকা দিতে পারবেন? না থাকলে 'নেই' বলুন।"
 
-STEP 4 — CLOSING (only after ALL mandatory items are collected, OR at the 3-minute time limit)
-Say EXACTLY one of:
-- English: "Thank you for your time and for providing the required information. Please click the End Session button to complete the interview."
-- Bangla: "আপনার সময় ও প্রয়োজনীয় তথ্য দেওয়ার জন্য ধন্যবাদ। সাক্ষাৎকারটি সম্পন্ন করতে অনুগ্রহ করে 'End Session' বাটনে ক্লিক করুন।"
+STEP 2.5 — VERIFY BEFORE CLOSING (internal — do NOT read aloud)
+Before STEP 3, confirm EVERY mandatory item has a clear applicant answer:
+□ Loan type
+□ Loan purpose
+□ Requested amount (exact BDT)
+□ Tenure in months
+□ Income source
+□ Employer/business name
+□ Net monthly income
+□ Other income (amount or none)
+□ Existing EMI/obligations (amount or none)
+□ Asset value (car/home only)
+□ Down payment (car/home only — amount or none)
 
-NEVER tell the candidate to click End Session before STEP 4.
-NEVER end the interview because of silence, pauses, or time pressure before the checklist is complete (unless the 3-minute limit is reached).
+If ANY box is unchecked, ask that ONE missing item now and WAIT. Do NOT close.
 
-If the candidate explicitly says they want to stop now:
-- Acknowledge briefly
-- Say EXACTLY: "Certainly. Please click the End Session button to submit your interview."
+STEP 3 — CLOSING (ONLY when STEP 2.5 verification passes)
+- Give ONLY the closing message — no acknowledgements, no questions, no extra sentences before or after
+- Say the closing message ONCE only. Do NOT repeat it.
+- English (say exactly once): "Thank you for your time and for providing the required information. Please click the End Session button to complete the interview."
+- Bengali (say exactly once): "আপনার সময় ও প্রয়োজনীয় তথ্য দেওয়ার জন্য ধন্যবাদ। সাক্ষাৎকারটি সম্পন্ন করতে অনুগ্রহ করে 'End Session' বাটনে ক্লিক করুন।"
+- After the closing message, STOP COMPLETELY. Remain silent. Do NOT respond if the applicant says thank you or anything else.
+- NEVER combine STEP 3 with any question in the same turn
+
+NEVER tell the applicant to click End Session before STEP 3.
+NEVER end the interview because of silence, pauses, or time elapsed — only close when the checklist is complete.
+
+If the applicant explicitly wants to stop:
+- Acknowledge briefly, then say EXACTLY: "Certainly. Please click the End Session button to submit your interview."
 
 TIME GUIDANCE:
-- Target about 3 minutes total
-- Prioritize completing the mandatory checklist over speed
-- Keep questions concise
+- Take as long as needed to complete the mandatory checklist
+- Keep each question short — one sentence plus the instruction for none/zero if relevant
 
 START NOW:
-Begin with greeting only, then WAIT.`;
+Begin with exactly: "Hello ${applicantFirstName}," then the professional introduction and readiness question. Do not start with নমস্কার. Then WAIT.`;
 
       const session = await ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
+        model: tokenData.liveModel,
         config: {
-          generationConfig: {
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: "Aoede"
-                }
-              }
-            },
-            temperature: 0.2,
-            topP: 0.8
-          },
           responseModalities: [Modality.AUDIO],
           systemInstruction,
+          temperature: 0.2,
+          topP: 0.8,
+          speechConfig: {
+            languageCode: 'en-US',
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Aoede',
+              },
+            },
+          },
+          // Gemini Live rejects languageCodes; enable transcription with empty config.
           outputAudioTranscription: {},
           inputAudioTranscription: {},
         },
@@ -422,47 +723,37 @@ Begin with greeting only, then WAIT.`;
             setIsConnecting(false);
             setConnectionError(null);
             setStage('live');
-            startAudioCapture();
-
-            if (sessionRef.current) {
-              sessionRef.current.sendRealtimeInput({
-                text: "Begin with your greeting only. Wait for the candidate reply, then ask the mandatory checklist questions one at a time. Do not tell them to end the session until every mandatory item is collected."
-              });
-            }
 
             timeNudgeTimerRef.current = setTimeout(() => {
-              if (
-                sessionRef.current &&
-                wrapUpStateRef.current === 'active' &&
-                !closingRequestedRef.current
-              ) {
-                sessionRef.current.sendRealtimeInput({
-                  text: "Time check: about 2 minutes 30 seconds have passed. Ask any remaining mandatory checklist questions now. Keep each question short. Do not give the closing message yet unless every mandatory item is already collected."
-                });
-              }
+              nudgeIncompleteChecklist(
+                "Time check: about 2 minutes 30 seconds have passed. Ask any remaining mandatory checklist questions now — ONE per turn. Do NOT give the closing message until every mandatory item has a clear applicant answer."
+              );
             }, INTERVIEW_TIME_NUDGE_MS);
 
+            urgentNudgeTimerRef.current = setTimeout(() => {
+              nudgeIncompleteChecklist(
+                "Urgent: interview is running long. Ask any remaining mandatory checklist items ONE at a time. For car/home loans you MUST get both asset value AND down payment as separate answers. Do NOT close until all items are answered."
+              );
+            }, INTERVIEW_URGENT_NUDGE_MS);
+
             hardLimitTimerRef.current = setTimeout(() => {
-              if (
-                wrapUpStateRef.current !== 'saving' &&
-                wrapUpStateRef.current !== 'submitted' &&
-                !closingRequestedRef.current
-              ) {
-                requestClosingMessage();
-              }
-            }, INTERVIEW_HARD_LIMIT_MS);
+              nudgeIncompleteChecklist(
+                "Long interview reminder: continue asking remaining mandatory checklist items ONE at a time. NEVER give the closing message until the applicant has clearly answered every item including down payment for car/home loans."
+              );
+            }, INTERVIEW_LONG_NUDGE_MS);
           },
 
           onmessage: async (message: LiveServerMessage) => {
             const serverContent = (message as any).serverContent;
 
+            if (closingDeliveredRef.current) {
+              return;
+            }
+
             const base64Audio = serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio) {
+            if (base64Audio && !closingDeliveredRef.current) {
               const pcmData = new Int16Array(base64ToUint8Array(base64Audio).buffer);
-              audioQueueRef.current.push(pcmData);
-              if (!isPlayingRef.current) {
-                playNextInQueue();
-              }
+              pcmPlayerRef.current?.enqueue(pcmData);
             }
 
             if (serverContent) {
@@ -473,8 +764,14 @@ Begin with greeting only, then WAIT.`;
               if (!userText) {
                 userText = serverContent.inputAudioTranscription?.text || serverContent.inputTranscription?.text || "";
               }
-              if (userText) {
-                addTranscriptMessage('Candidate', userText);
+              if (
+                userText &&
+                usingTranscribeFallbackRef.current &&
+                !closingDeliveredRef.current &&
+                wrapUpStateRef.current !== 'closing' &&
+                wrapUpStateRef.current !== 'closing_done'
+              ) {
+                bufferApplicantText(userText);
               }
 
               let aiText = "";
@@ -484,28 +781,39 @@ Begin with greeting only, then WAIT.`;
               if (!aiText) {
                 aiText = serverContent.outputAudioTranscription?.text || serverContent.outputTranscription?.text || "";
               }
-              if (aiText) {
-                addTranscriptMessage('assistant', aiText);
+              if (aiText && !closingDeliveredRef.current) {
+                bufferAssistantText(aiText);
               }
             }
 
             if (serverContent?.turnComplete) {
                 isTurnCompleteRef.current = true;
-                if (wrapUpStateRef.current === 'closing' && !isPlayingRef.current && !closingDeliveredRef.current) {
-                    // Do nothing here, it is handled in playNextInQueue
-                }
+                assistantTurnCompleteRef.current = true;
+                finalizeApplicantTranscript();
+                tryFlushAssistantTranscript();
             } else if (serverContent) {
                 isTurnCompleteRef.current = false;
+                assistantTurnCompleteRef.current = false;
             }
           },
 
           onclose: () => {
+            if (intentionalCloseRef.current) {
+              intentionalCloseRef.current = false;
+              sessionRef.current = null;
+              return;
+            }
+
             if (!hasEverConnected) {
               setConnectionError("Connection closed unexpectedly. Please try again.");
               setIsConnecting(false);
               setIsConnected(false);
               sessionRef.current = null;
-            } else if (wrapUpStateRef.current !== 'saving' && wrapUpStateRef.current !== 'submitted') {
+            } else if (
+              wrapUpStateRef.current !== 'saving' &&
+              wrapUpStateRef.current !== 'submitted' &&
+              wrapUpStateRef.current !== 'closing_done'
+            ) {
               stopInterview();
             }
           },
@@ -525,6 +833,38 @@ Begin with greeting only, then WAIT.`;
       });
 
       sessionRef.current = session;
+      await startAudioCapture();
+
+      // Kick off after the session handle exists. Doing this in onopen races
+      // sessionRef assignment and silently skips the AI greeting.
+      session.sendRealtimeInput({
+        text: `Begin now. First words must be exactly "Hello ${applicantFirstName}," then introduce yourself as Bank Loan Agent AI and ask if they are ready. Do NOT start with নমস্কার. Then wait. Ask one checklist question per turn. Never say লিখুন or ask two questions in one turn.`,
+      });
+
+      // Dedicated transcription is secondary — never block the spoken interview.
+      void (async () => {
+        try {
+          const transcribeToken = await fetchLiveSessionToken(`/loan-interview/${transcriptIdentifier}/live-token`);
+          const transcribeAi = createGeminiLiveClient(transcribeToken.token);
+          transcribeManagerRef.current = new TranscribeLiveManager(
+            transcribeAi,
+            transcribeToken.transcriptionModel,
+            {
+              participantSpeaker: 'applicant',
+              languageCodes: ['bn-BD', 'en-US'],
+              context: 'loan',
+              orchestrator: orchestratorRef.current,
+              onTranscriptChange: () => syncTranscript(),
+              onFallbackChange: (usingFallback) => {
+                usingTranscribeFallbackRef.current = usingFallback;
+              },
+            },
+          );
+          await transcribeManagerRef.current.start();
+        } catch {
+          usingTranscribeFallbackRef.current = true;
+        }
+      })();
     } catch (err: any) {
       console.error("Critical error during Gemini connection initialization:", err);
       setIsConnecting(false);
@@ -532,97 +872,118 @@ Begin with greeting only, then WAIT.`;
     }
   };
 
+  const persistTranscriptInBackground = (transcriptIdentifier: string, transcriptText: string): void => {
+    const token = document
+      .querySelector('meta[name="csrf-token"]')
+      ?.getAttribute('content');
+
+    const body = JSON.stringify({ transcript_text: transcriptText });
+
+    void fetch(`/loan-interview/${transcriptIdentifier}/transcript`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': token || '',
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body,
+      credentials: 'same-origin',
+      keepalive: true,
+    }).then(async (response) => {
+      if (!response.ok) {
+        console.error('Background transcript save failed.', response.status);
+      }
+    }).catch((error) => {
+      console.error('Background transcript save error.', error);
+    });
+  };
+
+  const releaseLocalMedia = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+
+    micCaptureRef.current?.stop();
+    micCaptureRef.current = null;
+
+    pcmPlayerRef.current?.stop();
+    pcmPlayerRef.current = null;
+  };
+
   const stopInterview = async () => {
-    if (wrapUpStateRef.current === 'saving' || wrapUpStateRef.current === 'submitted' || isSaving) return;
-
-    if (timeNudgeTimerRef.current) clearTimeout(timeNudgeTimerRef.current);
-    if (hardLimitTimerRef.current) clearTimeout(hardLimitTimerRef.current);
-    
-    setWrapUpState('saving');
-    wrapUpStateRef.current = 'saving';
-    
-    const transcriptIdentifier = interviewData?.public_url;
-
-    if (!transcriptIdentifier) {
-      alert("Missing interview identifier.");
+    if (wrapUpStateRef.current === 'saving' || wrapUpStateRef.current === 'submitted') {
       return;
     }
 
+    clearClosingTimers();
+    if (timeNudgeTimerRef.current) clearTimeout(timeNudgeTimerRef.current);
+    if (urgentNudgeTimerRef.current) clearTimeout(urgentNudgeTimerRef.current);
+    if (hardLimitTimerRef.current) clearTimeout(hardLimitTimerRef.current);
+
+    wrapUpStateRef.current = 'saving';
+    setWrapUpState('saving');
+
+    const transcriptIdentifier = interviewData?.public_url;
+
+    // Stop Live / mic immediately so the applicant leaves the room without waiting.
     try {
-      setIsSaving(true);
-
-      // Stop AudioWorklet samples and explicit flush
-      if (sessionRef.current) {
-        sessionRef.current.sendRealtimeInput({ audioStreamEnd: true });
-      }
-
-      // Stop microphone and disconnect capture nodes
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-        localStreamRef.current = null;
-      }
-      if (processorRef.current) {
-         processorRef.current.disconnect();
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => { });
-        audioContextRef.current = null;
-      }
-
-      setIsConnected(false);
-      setIsConnecting(false);
-      audioQueueRef.current = [];
-      isPlayingRef.current = false;
-
-      // Keep Gemini open until transcription remains quiet for 1.2s max 4s.
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const finalTranscript = transcriptRef.current;
-      const transcriptText = finalTranscript
-        .map((e: any) => `${e.speaker === 'assistant' ? 'AI' : 'Candidate'}: ${e.text}`)
-        .join('\n\n');
-
-      const token = document
-        .querySelector('meta[name="csrf-token"]')
-        ?.getAttribute('content');
-
-      const response = await fetch(`/loan-interview/${transcriptIdentifier}/transcript`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': token || '',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          transcript_text: transcriptText,
-        }),
-      });
-
-      if (!response.ok) {
-          setWrapUpState('closing'); // Reset to allow retry
-          throw new Error('Failed to save session');
-      }
-
-      if (sessionRef.current) {
-        try {
-          sessionRef.current.close();
-        } catch (_) { }
-        sessionRef.current = null;
-      }
-
-      setIsCompleted(true);
-      setStage('completed');
-      setWrapUpState('submitted');
-
-      if (onComplete) {
-        onComplete();
-      }
-    } catch (error) {
-      console.error("Failed to save session:", error);
-      alert("Failed to save interview session.");
-    } finally {
-      setIsSaving(false);
+      sessionRef.current?.sendRealtimeInput({ audioStreamEnd: true });
+    } catch {
+      // Ignore flush errors during teardown.
     }
+
+    void transcribeManagerRef.current?.stop();
+    transcribeManagerRef.current = null;
+
+    releaseLocalMedia();
+
+    setIsConnected(false);
+    setIsConnecting(false);
+    setIsMuted(true);
+
+    finalizeApplicantTranscript();
+    if (pendingAssistantTextRef.current.trim()) {
+      flushAssistantTranscript({
+        allowClosing: closingDeliveredRef.current || closingRequestedRef.current,
+      });
+    }
+
+    const transcriptText = orchestratorRef.current.toSaveFormat('Applicant');
+
+    if (sessionRef.current) {
+      intentionalCloseRef.current = true;
+      try {
+        sessionRef.current.close();
+      } catch {
+        // Ignore close errors during teardown.
+      }
+      sessionRef.current = null;
+    }
+
+    // Show thank-you immediately — do not wait on network or extraction.
+    setIsSaving(false);
+    setIsCompleted(true);
+    setStage('completed');
+    wrapUpStateRef.current = 'submitted';
+    setWrapUpState('submitted');
+
+    if (onComplete) {
+      onComplete();
+    }
+
+    if (!transcriptIdentifier) {
+      console.error('Missing interview identifier for background transcript save.');
+      return;
+    }
+
+    if (!transcriptText.trim()) {
+      console.error('Empty transcript; background save skipped.');
+      return;
+    }
+
+    persistTranscriptInBackground(transcriptIdentifier, transcriptText);
   };
 
   if (isCompleted || stage === 'completed') {
@@ -642,7 +1003,8 @@ Begin with greeting only, then WAIT.`;
               Application Submitted — Thank you.
             </h2>
             <p className="text-slate-400 leading-relaxed">
-              This interview has already been completed.
+              Your interview session has ended. You can close this window now.
+         
             </p>
           </div>
         </motion.div>
@@ -763,6 +1125,8 @@ Begin with greeting only, then WAIT.`;
       transcript={transcript}
       transcriptEndRef={transcriptEndRef}
       wrapUpState={wrapUpState}
+      closingCountdown={closingCountdown}
+      participantLabel="Applicant"
     />
   );
 };
