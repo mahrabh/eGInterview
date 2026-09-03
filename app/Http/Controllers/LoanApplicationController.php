@@ -60,18 +60,26 @@ class LoanApplicationController extends Controller
     {
         $tempFile = storage_path('app/temp_loan_applicants_template.xlsx');
 
-        $writer = \Spatie\SimpleExcel\SimpleExcelWriter::create($tempFile);
-        $writer->addRows([
-            [
-                'applicant_name' => 'Example Applicant',
-                'phone_number' => '01900000001',
-            ],
-            [
-                'applicant_name' => 'Another Example',
-                'phone_number' => '01800000002',
-            ],
-        ]);
-        unset($writer); // flush/close before download
+        $textStyle = (new \OpenSpout\Common\Entity\Style\Style())->setFormat('@');
+        $writer = \Spatie\SimpleExcel\SimpleExcelWriter::create($tempFile)->noHeaderRow();
+
+        // Force phone cells as Excel text so leading zeros are kept while typing.
+        $writer->addRow(new \OpenSpout\Common\Entity\Row([
+            \OpenSpout\Common\Entity\Cell::fromValue('applicant_name'),
+            \OpenSpout\Common\Entity\Cell::fromValue('phone_number'),
+        ]));
+
+        foreach ([
+            ['Example Applicant', '01900000001'],
+            ['Another Example', '01800000002'],
+        ] as [$name, $phone]) {
+            $writer->addRow(new \OpenSpout\Common\Entity\Row([
+                \OpenSpout\Common\Entity\Cell::fromValue($name),
+                new \OpenSpout\Common\Entity\Cell\StringCell($phone, $textStyle),
+            ]));
+        }
+
+        unset($writer);
 
         return response()->download($tempFile, 'loan_applicants_template.xlsx')->deleteFileAfterSend();
     }
@@ -185,12 +193,23 @@ class LoanApplicationController extends Controller
     }
 
     /**
-     * Normalize Bangladesh-style phone values from CSV/XLSX (including Excel number cells).
+     * Normalize Bangladesh phone values from CSV/XLSX.
+     * Accepts: 01900000001, +8801900000001, 8801900000001, 1900000001,
+     * Excel-stripped leading zeros, and scientific-notation number cells.
      */
     private function normalizeImportPhone(mixed $phone): ?string
     {
         if (is_float($phone) || is_int($phone)) {
-            $phone = sprintf('%.0f', $phone);
+            // Prefer exact digit string for large numeric Excel cells.
+            $phone = number_format((float) $phone, 0, '', '');
+        } else {
+            $phone = trim((string) $phone);
+            // Excel / paste sometimes keeps a leading apostrophe for text cells.
+            $phone = ltrim($phone, "'`");
+
+            if (preg_match('/^([0-9]+(?:\.[0-9]+)?)[eE]([+\-]?[0-9]+)$/', $phone, $matches) === 1) {
+                $phone = number_format((float) $phone, 0, '', '');
+            }
         }
 
         $phone = preg_replace('/[^0-9]/', '', (string) $phone);
@@ -199,16 +218,20 @@ class LoanApplicationController extends Controller
             return null;
         }
 
+        // +880 / 880 / 00880 country codes → local 0...
         if (str_starts_with($phone, '880')) {
             $phone = '0' . substr($phone, 3);
+        } elseif (str_starts_with($phone, '00880')) {
+            $phone = '0' . substr($phone, 5);
         }
 
-        // Excel often drops the leading 0 from BD mobiles (e.g. 1712345678).
+        // Excel drops leading 0 → 10-digit local mobile starting with 1.
         if (preg_match('/^1\d{9}$/', $phone) === 1) {
             $phone = '0' . $phone;
         }
 
-        if (strlen($phone) < 10) {
+        // Final accepted local BD mobile shape: 01XXXXXXXXX (11 digits).
+        if (preg_match('/^01\d{9}$/', $phone) !== 1) {
             return null;
         }
 

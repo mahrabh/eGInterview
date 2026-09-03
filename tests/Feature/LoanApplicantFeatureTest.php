@@ -165,6 +165,36 @@ class LoanApplicantFeatureTest extends TestCase
         ]);
     }
 
+    public function test_import_accepts_common_bangladesh_phone_formats()
+    {
+        $user = User::factory()->create(['role' => 'recruiter']);
+
+        $csvContent = "applicant_name,phone_number\n";
+        $csvContent .= "Local Zero,01911112222\n";
+        $csvContent .= "Plus Country,+8801911113333\n";
+        $csvContent .= "Country No Plus,8801911114444\n";
+        $csvContent .= "Excel Stripped,1911115555\n";
+        $csvContent .= "Spaced,'01911116666\n";
+
+        $file = UploadedFile::fake()->createWithContent('phones.csv', $csvContent);
+
+        $response = $this->actingAs($user)->post('/loan-applications/import', [
+            'csv_file' => $file,
+        ]);
+
+        $response->assertSessionHas('success');
+        $response->assertSessionHas('success', function ($message) {
+            return str_contains($message, 'Successfully imported: 5');
+        });
+
+        foreach (['01911112222', '01911113333', '01911114444', '01911115555', '01911116666'] as $phone) {
+            $this->assertDatabaseHas('loan_applicants', [
+                'phone_hash' => hash('sha256', $phone),
+                'created_by' => $user->id,
+            ]);
+        }
+    }
+
     public function test_downloaded_template_can_be_imported(): void
     {
         $user = User::factory()->create(['role' => 'recruiter']);

@@ -3,7 +3,7 @@
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
         <div>
             <h2 class="text-4xl font-black text-white tracking-tight">Loan Applicants Overview</h2>
-            <p class="text-slate-400 mt-2 text-sm font-medium">Manage imports, applicants, and loan applications.</p>
+            <p class="text-slate-400 mt-2 text-sm font-medium">Download the template, replace example rows with real applicants, then import.</p>
         </div>
         
         <div class="flex items-center gap-4">
