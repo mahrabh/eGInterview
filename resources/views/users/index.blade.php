@@ -1,15 +1,17 @@
 <x-dark-layout>
-    <x-slot name="header">
-        <div class="flex justify-between items-center w-full">
-            <span>Users Management</span>
-            <a href="{{ route('users.create') }}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 border border-transparent rounded-xl font-bold text-xs text-white uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                Add Recruiter
-            </a>
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div>
+            <h2 class="text-3xl md:text-4xl font-black text-white tracking-tight">Users</h2>
+            <p class="text-slate-400 mt-1.5 text-sm">Create and manage Analyst and Recruiter workspace accounts.</p>
         </div>
-    </x-slot>
+        <a href="{{ route('users.create') }}"
+           class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-semibold border border-indigo-400/20 transition-colors shrink-0">
+            <svg class="w-4 h-4 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            Add User
+        </a>
+    </div>
 
-    <div class="glass-panel border border-slate-800 rounded-[2rem] overflow-hidden shadow-2xl relative">
+    <div class="glass-panel border border-slate-800 rounded-2xl overflow-hidden relative">
         @if(session('success'))
             <div class="flash-message bg-emerald-500/10 text-emerald-400 px-6 py-4 border-b border-emerald-500/20 font-bold text-sm flex items-center gap-3">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>

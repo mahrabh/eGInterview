@@ -15,18 +15,24 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                    @if(Auth::user()->canAccessRecruitment())
                     <x-nav-link :href="route('recruitment.index')" :active="request()->routeIs('recruitment.*') || request()->routeIs('interviews.*')">
                         {{ __('Recruitment') }}
                     </x-nav-link>
+                    @endif
+                    @if(Auth::user()->canAccessLoans())
                     <x-nav-link :href="route('loan-applications.index')" :active="request()->routeIs('loan-applications.*')">
                         {{ __('Loan Applicants') }}
                     </x-nav-link>
+                    @endif
+                    @if(Auth::user()->isAdmin())
                     <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')">
                         {{ __('Users') }}
                     </x-nav-link>
                     <x-nav-link :href="route('plans.index')" :active="request()->routeIs('plans.*')">
                         {{ __('Plans') }}
                     </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -82,18 +88,24 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            @if(Auth::user()->canAccessRecruitment())
             <x-responsive-nav-link :href="route('recruitment.index')" :active="request()->routeIs('recruitment.*') || request()->routeIs('interviews.*')">
                 {{ __('Recruitment') }}
             </x-responsive-nav-link>
+            @endif
+            @if(Auth::user()->canAccessLoans())
             <x-responsive-nav-link :href="route('loan-applications.index')" :active="request()->routeIs('loan-applications.*')">
                 {{ __('Loan Applicants') }}
             </x-responsive-nav-link>
+            @endif
+            @if(Auth::user()->isAdmin())
             <x-responsive-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')">
                 {{ __('Users') }}
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('plans.index')" :active="request()->routeIs('plans.*')">
                 {{ __('Plans') }}
             </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->

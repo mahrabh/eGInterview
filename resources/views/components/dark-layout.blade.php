@@ -186,20 +186,19 @@
         <div class="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/5 blur-[120px]"></div>
     </div>
 
-    <!-- Sticky Header Wrapper -->
-    <div class="sticky top-0 z-40 w-full bg-slate-950 pt-8 pb-4">
+    <!-- Sticky Header -->
+    <div class="sticky top-0 z-40 w-full bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80">
         <div class="max-w-7xl mx-auto px-6">
-            <!-- Top Navigation -->
-            <nav class="glass-panel rounded-[2rem] px-8 py-5 flex flex-col md:flex-row items-center justify-between shadow-2xl gap-4">
+            <nav class="px-0 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4">
             <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
-                <a href="{{ route('dashboard') }}" class="flex items-center gap-4 group">
+                <a href="{{ route('dashboard') }}" class="flex items-center gap-3 group">
                     {{-- Logo placeholder: replace src with your transparent PNG --}}
-                    <div class="w-12 h-12 rounded-[1.25rem] flex items-center justify-center shadow-lg shadow-indigo-500/20 border border-white/10 group-hover:scale-105 transition-transform bg-gradient-to-br from-indigo-500 to-blue-600 overflow-hidden">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 group-hover:scale-105 transition-transform bg-gradient-to-br from-indigo-500 to-blue-600 overflow-hidden">
                         {{-- <img src="/images/logo.png" alt="eGInterview AI" class="w-full h-full object-contain p-1"> --}}
-                        <span class="text-white font-black text-lg">eG</span>
+                        <span class="text-white font-black text-base">eG</span>
                     </div>
                     <div>
-                        <h1 class="text-2xl font-black text-white tracking-tight group-hover:text-indigo-300 transition-colors">eGInterview AI</h1>
+                        <h1 class="text-xl font-black text-white tracking-tight group-hover:text-indigo-300 transition-colors">eGInterview AI</h1>
                     </div>
                 </a>
             </div>
@@ -211,14 +210,18 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
                         Dashboard
                     </a>
+                    @if(Auth::check() && Auth::user()->canAccessRecruitment())
                     <a href="{{ route('recruitment.index') }}" class="{{ request()->routeIs('recruitment.*') || request()->routeIs('interviews.*') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                         Recruitment
                     </a>
+                    @endif
+                    @if(Auth::check() && Auth::user()->canAccessLoans())
                     <a href="{{ route('loan-applications.index') }}" class="{{ request()->routeIs('loan-applications.*') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         Loan Applicants
                     </a>
+                    @endif
                     {{-- Users + Plans: admin only --}}
                     @if(Auth::check() && Auth::user()->isAdmin())
                     <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">

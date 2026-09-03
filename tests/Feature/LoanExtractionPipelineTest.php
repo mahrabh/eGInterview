@@ -29,7 +29,7 @@ class LoanExtractionPipelineTest extends TestCase
         Config::set('services.gemini.key', 'test-gemini-key');
         Config::set('services.gemini.extraction_model', 'gemini-3.7-flash');
 
-        $this->user = User::factory()->create(['role' => 'recruiter']);
+        $this->user = User::factory()->create(['role' => 'analyst']);
         $this->applicant = LoanApplicant::create([
             'name' => 'Pipeline Applicant',
             'phone' => '01710000001',

@@ -41,12 +41,33 @@ class User extends Authenticatable
         return $this->role === 'admin';
     }
 
+    public function isRecruiter(): bool
+    {
+        return $this->role === 'recruiter';
+    }
+
+    public function isAnalyst(): bool
+    {
+        return $this->role === 'analyst';
+    }
+
+    public function canAccessRecruitment(): bool
+    {
+        return $this->isAdmin() || $this->isRecruiter();
+    }
+
+    public function canAccessLoans(): bool
+    {
+        return $this->isAdmin() || $this->isAnalyst();
+    }
+
     public function roleLabel(): string
     {
         return match ($this->role) {
-            'admin' => 'Workspace Owner',
+            'admin' => 'Admin',
             'analyst' => 'Analyst',
-            default => 'Recruiter',
+            'recruiter' => 'Recruiter',
+            default => ucfirst((string) $this->role),
         };
     }
 

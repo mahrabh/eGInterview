@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Interview;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -14,6 +15,8 @@ class InterviewController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', Interview::class);
+
         $query = Interview::with('user')
             ->orderByRaw("CASE status WHEN 'draft' THEN 1 WHEN 'pending' THEN 2 WHEN 'approved' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END ASC")
             ->latest('updated_at');
@@ -22,7 +25,7 @@ class InterviewController extends Controller
         if (!auth()->user()->isAdmin()) {
             $query->where('user_id', auth()->id());
         } else {
-            $users = User::orderBy('name')->get();
+            $users = User::whereIn('role', ['admin', 'recruiter'])->orderBy('name')->get();
             if ($request->filled('user_id')) {
                 $query->where('user_id', $request->user_id);
             }
@@ -46,6 +49,8 @@ class InterviewController extends Controller
 
     public function import(Request $request)
     {
+        Gate::authorize('create', Interview::class);
+
         $request->validate([
             'file' => 'required|mimes:csv,txt,xlsx,xls',
         ]);
@@ -143,6 +148,8 @@ class InterviewController extends Controller
 
     public function generateQuestions(Interview $interview)
     {
+        Gate::authorize('update', $interview);
+
         try {
             $prompt = "You are an expert technical recruiter.
 Generate exactly 10 interview questions for the role '{$interview->applied_role}'.
@@ -204,11 +211,17 @@ Rules:
 
     public function review(Interview $interview)
     {
+        if (auth()->check()) {
+            Gate::authorize('view', $interview);
+        }
+
         return view('interview.review', compact('interview'));
     }
 
     public function approve(Request $request, Interview $interview)
     {
+        Gate::authorize('update', $interview);
+
         $request->validate([
             'questions' => 'required|array|min:1',
             'questions.*' => 'required|string',
@@ -231,6 +244,8 @@ Rules:
 
     public function regenerateLink(Interview $interview)
     {
+        Gate::authorize('update', $interview);
+
         $interview->update([
             'public_url' => Str::random(32),
             'link_expires_at' => now()->addHours(48),
@@ -542,6 +557,7 @@ XML;
         }
 
         $interview = Interview::where('id', $identifier)->firstOrFail();
+        Gate::authorize('delete', $interview);
         $interview->delete();
 
         return back()->with('success', 'Candidate deleted successfully.');

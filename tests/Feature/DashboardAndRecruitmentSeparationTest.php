@@ -21,7 +21,7 @@ class DashboardAndRecruitmentSeparationTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('System overview across recruitment and loan interviews.');
-        $response->assertSee('Recruitment Candidates');
+        $response->assertSee('Candidates');
         $response->assertSee('Loan Applicants');
         $response->assertDontSee('Import CSV');
         $response->assertDontSee('Download Template');
@@ -72,11 +72,25 @@ class DashboardAndRecruitmentSeparationTest extends TestCase
             'user_id' => $recruiterB->id,
         ]);
 
+        $response = $this->actingAs($recruiterA)->get('/dashboard');
+
+        $response->assertOk();
+        $response->assertSee('Owned Candidate');
+        $response->assertDontSee('Other Candidate');
+        $response->assertSee('Completed');
+        $response->assertDontSee('Loan Applicants');
+    }
+
+    public function test_analyst_dashboard_does_not_expose_other_users_loans(): void
+    {
+        $analystA = User::factory()->create(['role' => 'analyst']);
+        $analystB = User::factory()->create(['role' => 'analyst']);
+
         $applicantA = LoanApplicant::create([
             'name' => 'Loan Owner',
             'phone' => '01710000001',
             'application_reference' => 'LA-OWN',
-            'created_by' => $recruiterA->id,
+            'created_by' => $analystA->id,
         ]);
         LoanApplication::create([
             'loan_applicant_id' => $applicantA->id,
@@ -88,7 +102,7 @@ class DashboardAndRecruitmentSeparationTest extends TestCase
             'name' => 'Loan Other',
             'phone' => '01710000002',
             'application_reference' => 'LA-OTH',
-            'created_by' => $recruiterB->id,
+            'created_by' => $analystB->id,
         ]);
         LoanApplication::create([
             'loan_applicant_id' => $applicantB->id,
@@ -96,14 +110,13 @@ class DashboardAndRecruitmentSeparationTest extends TestCase
             'status' => 'draft',
         ]);
 
-        $response = $this->actingAs($recruiterA)->get('/dashboard');
+        $response = $this->actingAs($analystA)->get('/dashboard');
 
         $response->assertOk();
-        $response->assertSee('Owned Candidate');
-        $response->assertDontSee('Other Candidate');
         $response->assertSee('Loan Owner');
         $response->assertDontSee('Loan Other');
-        $response->assertSee('Completed Interviews');
+        $response->assertSee('Needs Review');
+        $response->assertDontSee('>Candidates</');
     }
 
     public function test_approve_redirects_to_recruitment_index(): void

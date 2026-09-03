@@ -25,7 +25,7 @@ class LoanApplicationController extends Controller
                 $q->where('created_by', $request->user()->id);
             });
         } else {
-            $users = User::orderBy('name')->get();
+            $users = User::whereIn('role', ['admin', 'analyst'])->orderBy('name')->get();
 
             if ($request->filled('user_id')) {
                 $query->whereHas('applicant', function ($q) use ($request) {

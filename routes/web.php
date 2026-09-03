@@ -45,64 +45,67 @@ Route::post('/live/transcription-fallback', [\App\Http\Controllers\GeminiLiveTok
 
 /*
 |--------------------------------------------------------------------------
-| Recruiter Routes (all authenticated users)
-| Access: Dashboard + full interview system + own account settings
+| Authenticated Routes
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    // System dashboard overview
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    // Recruitment (candidate interview management)
-    Route::get('/recruitment', [InterviewController::class, 'index'])->name('recruitment.index');
-    Route::get('/interviews/download-template', [InterviewController::class, 'downloadTemplate'])->name('interviews.download-template');
-    Route::post('/interviews/import', [InterviewController::class, 'import'])->name('interviews.import');
-    Route::post('/interviews/{interview}/generate', [InterviewController::class, 'generateQuestions'])->name('interviews.generate');
-    Route::get('/interviews/{interview}/review', [InterviewController::class, 'review'])->name('interviews.review');
-    Route::post('/interviews/{interview}/approve', [InterviewController::class, 'approve'])->name('interviews.approve');
-    Route::post('/interviews/{interview}/regenerate-link', [InterviewController::class, 'regenerateLink'])->name('interviews.regenerate-link');
-    Route::delete('/interviews/{identifier}', [InterviewController::class, 'destroy'])->name('interviews.destroy');
-
-    // Own account settings (name, email, password) — available to ALL logged-in users
     Route::get('/settings', [ProfileController::class, 'edit'])->name('settings');
     Route::patch('/settings', [ProfileController::class, 'update'])->name('settings.update');
 
-    // Keep old profile routes for Breeze compatibility
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Loan Applications
-    Route::get('/loan-applications', [\App\Http\Controllers\LoanApplicationController::class, 'index'])->name('loan-applications.index');
-    Route::get('/loan-applications/download-template', [\App\Http\Controllers\LoanApplicationController::class, 'downloadTemplate'])->name('loan-applications.download-template');
-    Route::get('/loan-applications/status-snapshot', [\App\Http\Controllers\LoanApplicationController::class, 'statusSnapshot'])->name('loan-applications.status-snapshot');
-    Route::post('/loan-applications/import', [\App\Http\Controllers\LoanApplicationController::class, 'import'])->name('loan-applications.import');
-    Route::post('/loan-applications/{application}/generate-link', [\App\Http\Controllers\LoanApplicationController::class, 'generateLink'])->name('loan-applications.generate-link');
-    Route::get('/loan-applications/{application}/report', [\App\Http\Controllers\LoanApplicationController::class, 'report'])->name('loan-applications.report');
-    Route::get('/loan-applications/{application}/status', [\App\Http\Controllers\LoanApplicationController::class, 'status'])->name('loan-applications.status');
-    Route::post('/loan-applications/{application}/recalculate', [\App\Http\Controllers\LoanApplicationController::class, 'recalculate'])->name('loan-applications.recalculate');
-    Route::post('/loan-applications/{application}/retry-extraction', [\App\Http\Controllers\LoanApplicationController::class, 'retryExtraction'])->name('loan-applications.retry-extraction');
-    Route::delete('/loan-applications/{applicant}', [\App\Http\Controllers\LoanApplicationController::class, 'destroy'])->name('loan-applications.destroy');
+    /*
+    |--------------------------------------------------------------------------
+    | Recruitment — Admin + Recruiter
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware(['role:admin,recruiter'])->group(function () {
+        Route::get('/recruitment', [InterviewController::class, 'index'])->name('recruitment.index');
+        Route::get('/interviews/download-template', [InterviewController::class, 'downloadTemplate'])->name('interviews.download-template');
+        Route::post('/interviews/import', [InterviewController::class, 'import'])->name('interviews.import');
+        Route::post('/interviews/{interview}/generate', [InterviewController::class, 'generateQuestions'])->name('interviews.generate');
+        Route::get('/interviews/{interview}/review', [InterviewController::class, 'review'])->name('interviews.review');
+        Route::post('/interviews/{interview}/approve', [InterviewController::class, 'approve'])->name('interviews.approve');
+        Route::post('/interviews/{interview}/regenerate-link', [InterviewController::class, 'regenerateLink'])->name('interviews.regenerate-link');
+        Route::delete('/interviews/{identifier}', [InterviewController::class, 'destroy'])->name('interviews.destroy');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Loan Applicants — Admin + Analyst
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware(['role:admin,analyst'])->group(function () {
+        Route::get('/loan-applications', [\App\Http\Controllers\LoanApplicationController::class, 'index'])->name('loan-applications.index');
+        Route::get('/loan-applications/download-template', [\App\Http\Controllers\LoanApplicationController::class, 'downloadTemplate'])->name('loan-applications.download-template');
+        Route::get('/loan-applications/status-snapshot', [\App\Http\Controllers\LoanApplicationController::class, 'statusSnapshot'])->name('loan-applications.status-snapshot');
+        Route::post('/loan-applications/import', [\App\Http\Controllers\LoanApplicationController::class, 'import'])->name('loan-applications.import');
+        Route::post('/loan-applications/{application}/generate-link', [\App\Http\Controllers\LoanApplicationController::class, 'generateLink'])->name('loan-applications.generate-link');
+        Route::get('/loan-applications/{application}/report', [\App\Http\Controllers\LoanApplicationController::class, 'report'])->name('loan-applications.report');
+        Route::get('/loan-applications/{application}/status', [\App\Http\Controllers\LoanApplicationController::class, 'status'])->name('loan-applications.status');
+        Route::post('/loan-applications/{application}/recalculate', [\App\Http\Controllers\LoanApplicationController::class, 'recalculate'])->name('loan-applications.recalculate');
+        Route::post('/loan-applications/{application}/retry-extraction', [\App\Http\Controllers\LoanApplicationController::class, 'retryExtraction'])->name('loan-applications.retry-extraction');
+        Route::delete('/loan-applications/{applicant}', [\App\Http\Controllers\LoanApplicationController::class, 'destroy'])->name('loan-applications.destroy');
+    });
 });
 
 /*
 |--------------------------------------------------------------------------
 | Admin-Only Routes
-| Access: Users management + Plans management
+| Access: Users, Plans
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'verified', 'admin'])->group(function () {
-    // User/Recruiter management
     Route::resource('users', UserController::class);
 
-    // Plans management (create, assign to recruiters)
     Route::resource('plans', PlanController::class);
 
-    // Assign plan to a recruiter
     Route::patch('/users/{user}/assign-plan', [UserController::class, 'assignPlan'])->name('users.assign-plan');
-    // Loan Rules Management
-    Route::resource('loan-rules', \App\Http\Controllers\LoanProductRuleController::class);
 });
 
 require __DIR__ . '/auth.php';
