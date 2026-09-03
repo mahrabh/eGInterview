@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
@@ -50,8 +51,11 @@ Route::post('/live/transcription-fallback', [\App\Http\Controllers\GeminiLiveTok
 */
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    // Dashboard & Interview Management
-    Route::get('/dashboard', [InterviewController::class, 'index'])->name('dashboard');
+    // System dashboard overview
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Recruitment (candidate interview management)
+    Route::get('/recruitment', [InterviewController::class, 'index'])->name('recruitment.index');
     Route::get('/interviews/download-template', [InterviewController::class, 'downloadTemplate'])->name('interviews.download-template');
     Route::post('/interviews/import', [InterviewController::class, 'import'])->name('interviews.import');
     Route::post('/interviews/{interview}/generate', [InterviewController::class, 'generateQuestions'])->name('interviews.generate');

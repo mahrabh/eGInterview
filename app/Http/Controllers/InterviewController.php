@@ -41,7 +41,7 @@ class InterviewController extends Controller
         }
 
         $interviews = $query->paginate(15)->appends($request->query());
-        return view('dashboard', compact('interviews', 'users'));
+        return view('recruitment', compact('interviews', 'users'));
     }
 
     public function import(Request $request)
@@ -225,7 +225,7 @@ Rules:
             'link_expires_at' => now()->addHours(48),
         ]);
 
-        return redirect()->route('dashboard', array_filter(['page' => request('page')]))
+        return redirect()->route('recruitment.index', array_filter(['page' => request('page')]))
             ->with('success', 'Link activated for ' . $interview->candidate_name);
     }
 

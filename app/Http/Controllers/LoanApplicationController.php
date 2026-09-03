@@ -59,12 +59,19 @@ class LoanApplicationController extends Controller
     public function downloadTemplate()
     {
         $tempFile = storage_path('app/temp_loan_applicants_template.xlsx');
-        
-        \Spatie\SimpleExcel\SimpleExcelWriter::create($tempFile)
-            ->addRow([
-                'applicant_name' => 'John Doe',
-                'phone_number' => '01712345678',
-            ]);
+
+        $writer = \Spatie\SimpleExcel\SimpleExcelWriter::create($tempFile);
+        $writer->addRows([
+            [
+                'applicant_name' => 'Example Applicant',
+                'phone_number' => '01900000001',
+            ],
+            [
+                'applicant_name' => 'Another Example',
+                'phone_number' => '01800000002',
+            ],
+        ]);
+        unset($writer); // flush/close before download
 
         return response()->download($tempFile, 'loan_applicants_template.xlsx')->deleteFileAfterSend();
     }
@@ -79,33 +86,38 @@ class LoanApplicationController extends Controller
 
         $file = $request->file('csv_file');
         $extension = $file->getClientOriginalExtension() === 'txt' ? 'csv' : $file->getClientOriginalExtension();
-        
+
         $successCount = 0;
         $errorCount = 0;
         $duplicateCount = 0;
         $invalidCount = 0;
+        $rowCount = 0;
         $ownerId = $request->user()->id;
 
         DB::beginTransaction();
         try {
             $reader = \Spatie\SimpleExcel\SimpleExcelReader::create($file->getRealPath(), $extension);
-            
-            $reader->getRows()->each(function(array $row) use (&$successCount, &$errorCount, &$duplicateCount, &$invalidCount, $ownerId) {
+
+            $reader->getRows()->each(function (array $row) use (&$successCount, &$errorCount, &$duplicateCount, &$invalidCount, &$rowCount, $ownerId) {
+                $rowCount++;
+
                 // standardize keys
                 $row = array_change_key_case($row, CASE_LOWER);
-                $name = $row['applicant_name'] ?? null;
+                $name = isset($row['applicant_name']) ? trim((string) $row['applicant_name']) : '';
                 $phone = $row['phone_number'] ?? null;
 
-                if (empty($name) || empty($phone)) {
+                if ($name === '' || $phone === null || trim((string) $phone) === '') {
                     $errorCount++;
                     $invalidCount++;
-                    return; // continue
+                    return;
                 }
-                
-                // Normalize phone: strip non-numeric, convert 880 prefix to 0
-                $phone = preg_replace('/[^0-9]/', '', (string)$phone);
-                if (str_starts_with($phone, '880')) {
-                    $phone = '0' . substr($phone, 3);
+
+                $phone = $this->normalizeImportPhone($phone);
+
+                if ($phone === null) {
+                    $errorCount++;
+                    $invalidCount++;
+                    return;
                 }
 
                 $phoneHash = hash('sha256', $phone);
@@ -143,19 +155,64 @@ class LoanApplicationController extends Controller
             return back()->with('error', 'Error processing file: ' . $e->getMessage());
         }
 
-        $message = "Import completed. Successfully imported: $successCount.";
+        if ($rowCount === 0) {
+            return back()->with(
+                'error',
+                'No applicant rows found. Download the template, add rows with applicant_name and phone_number, then import again.'
+            );
+        }
+
+        if ($successCount === 0 && $duplicateCount > 0 && $invalidCount === 0) {
+            return back()->with(
+                'error',
+                "No new applicants imported. All {$duplicateCount} phone number(s) already exist in your list."
+            );
+        }
+
+        $message = "Import completed. Successfully imported: {$successCount}.";
         if ($errorCount > 0) {
             $parts = [];
             if ($duplicateCount > 0) {
-                $parts[] = "duplicates in your list: $duplicateCount";
+                $parts[] = "duplicates in your list: {$duplicateCount}";
             }
             if ($invalidCount > 0) {
-                $parts[] = "invalid rows: $invalidCount";
+                $parts[] = "invalid rows: {$invalidCount}";
             }
             $message .= ' Skipped (' . implode(', ', $parts) . ').';
         }
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * Normalize Bangladesh-style phone values from CSV/XLSX (including Excel number cells).
+     */
+    private function normalizeImportPhone(mixed $phone): ?string
+    {
+        if (is_float($phone) || is_int($phone)) {
+            $phone = sprintf('%.0f', $phone);
+        }
+
+        $phone = preg_replace('/[^0-9]/', '', (string) $phone);
+
+        if ($phone === null || $phone === '') {
+            return null;
+        }
+
+        if (str_starts_with($phone, '880')) {
+            $phone = '0' . substr($phone, 3);
+        }
+
+        // Excel often drops the leading 0 from BD mobiles (e.g. 1712345678).
+        if (preg_match('/^1\d{9}$/', $phone) === 1) {
+            $phone = '0' . $phone;
+        }
+
+        if (strlen($phone) < 10) {
+            return null;
+        }
+
+        return $phone;
     }
 
     public function destroy($id)

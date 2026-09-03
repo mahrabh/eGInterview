@@ -106,11 +106,111 @@ class LoanApplicantFeatureTest extends TestCase
         ]);
 
         $response->assertSessionHas('success');
+        $response->assertSessionHas('success', function ($message) {
+            return str_contains($message, 'Successfully imported: 2')
+                && str_contains($message, 'duplicates in your list: 1');
+        });
         
         $this->assertDatabaseCount('loan_applicants', 2);
         $this->assertDatabaseHas('loan_applicants', ['phone_hash' => hash('sha256', '01999999999')]);
         $this->assertDatabaseHas('loan_applicants', ['phone_hash' => hash('sha256', '01888888888')]);
         $this->assertDatabaseCount('loan_applications', 2);
+    }
+
+    public function test_reimporting_existing_phone_explains_duplicate_clearly()
+    {
+        $user = User::factory()->create(['role' => 'recruiter']);
+
+        LoanApplicant::create([
+            'name' => 'John Doe',
+            'phone' => '01712345678',
+            'application_reference' => 'LA-EXIST',
+            'created_by' => $user->id,
+        ]);
+
+        $csvContent = "applicant_name,phone_number\n";
+        $csvContent .= "John Doe,01712345678\n";
+
+        $file = UploadedFile::fake()->createWithContent('test.csv', $csvContent);
+
+        $response = $this->actingAs($user)->post('/loan-applications/import', [
+            'csv_file' => $file,
+        ]);
+
+        $response->assertSessionHas('error');
+        $response->assertSessionHas('error', function ($message) {
+            return str_contains($message, 'No new applicants imported')
+                && str_contains($message, 'already exist in your list');
+        });
+        $this->assertDatabaseCount('loan_applicants', 1);
+    }
+
+    public function test_import_restores_leading_zero_when_excel_strips_it()
+    {
+        $user = User::factory()->create(['role' => 'recruiter']);
+
+        $csvContent = "applicant_name,phone_number\n";
+        $csvContent .= "Excel User,1712345678\n";
+
+        $file = UploadedFile::fake()->createWithContent('test.csv', $csvContent);
+
+        $response = $this->actingAs($user)->post('/loan-applications/import', [
+            'csv_file' => $file,
+        ]);
+
+        $response->assertSessionHas('success');
+        $this->assertDatabaseHas('loan_applicants', [
+            'phone_hash' => hash('sha256', '01712345678'),
+            'created_by' => $user->id,
+        ]);
+    }
+
+    public function test_downloaded_template_can_be_imported(): void
+    {
+        $user = User::factory()->create(['role' => 'recruiter']);
+
+        $tempPath = storage_path('app/testing_loan_template_import.xlsx');
+        $writer = \Spatie\SimpleExcel\SimpleExcelWriter::create($tempPath);
+        $writer->addRows([
+            [
+                'applicant_name' => 'Example Applicant',
+                'phone_number' => '01900000001',
+            ],
+            [
+                'applicant_name' => 'Another Example',
+                'phone_number' => '01800000002',
+            ],
+        ]);
+        $writer->close();
+
+        $file = new UploadedFile(
+            $tempPath,
+            'loan_applicants_template.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true
+        );
+
+        $response = $this->actingAs($user)->post('/loan-applications/import', [
+            'csv_file' => $file,
+        ]);
+
+        $response->assertSessionHas('success');
+        $response->assertSessionHas('success', function ($message) {
+            return str_contains($message, 'Successfully imported: 2');
+        });
+
+        $this->assertDatabaseCount('loan_applicants', 2);
+        $this->assertDatabaseHas('loan_applicants', [
+            'phone_hash' => hash('sha256', '01900000001'),
+            'created_by' => $user->id,
+        ]);
+        $this->assertDatabaseHas('loan_applicants', [
+            'phone_hash' => hash('sha256', '01800000002'),
+            'created_by' => $user->id,
+        ]);
+
+        @unlink($tempPath);
     }
 
     public function test_import_allows_same_phone_for_different_recruiters()
@@ -180,7 +280,7 @@ class LoanApplicantFeatureTest extends TestCase
             'csv_file' => $file,
         ]);
 
-        $response->assertSessionHas('success');
+        $response->assertSessionHas('error');
         $this->assertDatabaseCount('loan_applicants', 1);
     }
     
