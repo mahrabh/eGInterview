@@ -14,7 +14,7 @@
     @endphp
 
     {{-- AI Interview hero (light) --}}
-    <section class="ai-hero rounded-2xl sm:rounded-3xl px-5 sm:px-8 py-7 sm:py-9 mb-6 sm:mb-8 text-slate-900">
+    <section class="ai-hero rounded-2xl sm:rounded-3xl px-5 sm:px-8 py-7 sm:py-9 {{ $mode === 'analyst' ? 'mb-4' : 'mb-6 sm:mb-8' }} text-slate-900">
         <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div class="max-w-2xl">
                 <div class="ai-hero-badge ai-hero-rise inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-600 mb-4">
@@ -73,6 +73,169 @@
         </div>
     </section>
 
+    @if($mode === 'analyst')
+        {{-- Analyst workspace: balanced KPIs + focused loan layout --}}
+        @php
+            $analystAssessed = (int) ($loanStatusCounts['assessed'] ?? 0);
+            $analystEligible = (int) ($loanOutcomeCounts['Indicatively Eligible'] ?? 0);
+            $analystNotEligible = (int) ($loanOutcomeCounts['Not Eligible Under Current Rules'] ?? 0);
+        @endphp
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div class="glass-panel rounded-xl px-4 py-3.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Applicants</p>
+                        <p class="text-2xl font-black text-slate-900 mt-1 tabular-nums">{{ number_format($totalLoanApplicants) }}</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Assigned to you</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="glass-panel rounded-xl border-amber-200 bg-amber-50/70 px-4 py-3.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <p class="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">Needs Review</p>
+                        <p class="text-2xl font-black text-amber-700 mt-1 tabular-nums">{{ number_format($loanNeedsReview) }}</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Awaiting action</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="glass-panel rounded-xl px-4 py-3.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Assessed</p>
+                        <p class="text-2xl font-black text-indigo-700 mt-1 tabular-nums">{{ number_format($analystAssessed) }}</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Completed scoring</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="glass-panel rounded-xl px-4 py-3.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Eligible</p>
+                        <p class="text-2xl font-black text-emerald-700 mt-1 tabular-nums">{{ number_format($analystEligible) }}</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">{{ number_format($analystNotEligible) }} not eligible</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        </div>
+                        <h3 class="text-sm font-bold text-slate-900">Loan Pipeline</h3>
+                    </div>
+                    <a href="{{ route('loan-applications.index') }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500">View all</a>
+                </div>
+                <div class="p-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2.5">
+                        <p class="text-[11px] text-slate-500 font-medium">Draft</p>
+                        <p class="text-lg font-black text-slate-900 mt-0.5 tabular-nums">{{ number_format((int) ($loanStatusCounts['draft'] ?? 0)) }}</p>
+                    </div>
+                    <div class="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2.5">
+                        <p class="text-[11px] text-amber-700 font-medium">Needs Review</p>
+                        <p class="text-lg font-black text-amber-700 mt-0.5 tabular-nums">{{ number_format($loanNeedsReview) }}</p>
+                    </div>
+                    <div class="rounded-lg bg-sky-50 border border-sky-100 px-3 py-2.5">
+                        <p class="text-[11px] text-sky-700 font-medium">Processing</p>
+                        <p class="text-lg font-black text-sky-700 mt-0.5 tabular-nums">{{ number_format($loanProcessing) }}</p>
+                    </div>
+                    <div class="rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2.5">
+                        <p class="text-[11px] text-indigo-700 font-medium">Assessed</p>
+                        <p class="text-lg font-black text-indigo-700 mt-0.5 tabular-nums">{{ number_format($analystAssessed) }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
+                    <h3 class="text-sm font-bold text-slate-900">Recent Applications</h3>
+                    <a href="{{ route('loan-applications.index') }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500">Manage</a>
+                </div>
+                <div class="divide-y divide-slate-100 max-h-[220px] overflow-y-auto">
+                    @forelse($recentLoans as $loan)
+                        <div class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors">
+                            <div class="min-w-0 flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-700 text-xs font-bold shrink-0">
+                                    {{ strtoupper(substr($loan->applicant->name ?? '?', 0, 1)) }}
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-slate-900 truncate">{{ $loan->applicant->name ?? 'Unknown' }}</p>
+                                    <p class="text-[11px] text-slate-500 mt-0.5 truncate">
+                                        {{ $loan->applicant->application_reference ?? '—' }}
+                                        · {{ ucfirst(str_replace('_', ' ', $loan->status ?? 'draft')) }}
+                                    </p>
+                                </div>
+                            </div>
+                            @php
+                                $canOpenReport = $loan->submitted_at !== null
+                                    || in_array($loan->status, ['pending', 'needs_review', 'assessed', 'processing'], true)
+                                    || is_array($loan->extracted_data);
+                            @endphp
+                            @if($canOpenReport)
+                                <a href="{{ route('loan-applications.report', $loan->id) }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500 whitespace-nowrap">Report</a>
+                            @else
+                                <a href="{{ route('loan-applications.index') }}" class="text-xs font-semibold text-slate-500 hover:text-indigo-600 whitespace-nowrap">Open</a>
+                            @endif
+                        </div>
+                    @empty
+                        <div class="px-4 py-8 text-center text-sm text-slate-500">No loan activity yet.</div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl border-amber-200 overflow-hidden">
+            <div class="px-4 py-3 border-b border-amber-100 flex items-center justify-between bg-amber-50/90">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <h3 class="text-sm font-bold text-amber-900">Needs Review Queue</h3>
+                </div>
+                <a href="{{ route('loan-applications.index', ['status' => 'needs_review']) }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500">View queue</a>
+            </div>
+            <div class="divide-y divide-slate-100">
+                @forelse($needsReviewLoans as $loan)
+                    <div class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                        <div class="min-w-0 flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-700 text-xs font-bold shrink-0">
+                                {{ strtoupper(substr($loan->applicant->name ?? '?', 0, 1)) }}
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-slate-900 truncate">{{ $loan->applicant->name ?? 'Unknown' }}</p>
+                                <p class="text-[11px] text-slate-500 mt-0.5 truncate">
+                                    {{ $loan->applicant->application_reference ?? '—' }}
+                                    @if($loan->outcome)
+                                        · {{ $loan->outcome }}
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('loan-applications.report', $loan->id) }}" class="inline-flex items-center px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 hover:bg-amber-100 whitespace-nowrap transition-colors">Review</a>
+                    </div>
+                @empty
+                    <div class="px-4 py-8 text-center text-sm text-slate-500">No items need review right now.</div>
+                @endforelse
+            </div>
+        </div>
+    @else
     {{-- KPI strip --}}
     <div class="grid grid-cols-2 {{ ($showRecruitment && $showLoans) ? 'xl:grid-cols-4' : 'md:grid-cols-3' }} gap-3 sm:gap-4 mb-6">
         @if($showRecruitment)
@@ -120,41 +283,26 @@
             </div>
         @endif
 
-        @if($showLoans && $mode === 'analyst')
-            <div class="glass-panel rounded-2xl border-amber-200 bg-amber-50/80 px-5 py-4">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <p class="text-xs font-semibold text-amber-700 uppercase tracking-wide">Needs Review</p>
-                        <p class="text-2xl md:text-3xl font-black text-amber-700 mt-1 tabular-nums">{{ number_format($loanNeedsReview) }}</p>
-                        <p class="text-xs text-slate-500 mt-1">Awaiting your action</p>
-                    </div>
-                    <div class="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
+        <div class="glass-panel rounded-2xl px-5 py-4 group hover:border-rose-200 transition-colors">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Needs Attention</p>
+                    <p class="text-2xl md:text-3xl font-black text-slate-900 mt-1 tabular-nums">{{ number_format($needsAttention) }}</p>
+                    <p class="text-xs text-slate-500 mt-1">
+                        @if($showRecruitment && $showLoans)
+                            Pending · expired · review
+                        @elseif($showRecruitment)
+                            Pending · expired links
+                        @else
+                            Review · processing
+                        @endif
+                    </p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </div>
             </div>
-        @elseif(!($showLoans && $mode === 'analyst'))
-            <div class="glass-panel rounded-2xl px-5 py-4 group hover:border-rose-200 transition-colors">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Needs Attention</p>
-                        <p class="text-2xl md:text-3xl font-black text-slate-900 mt-1 tabular-nums">{{ number_format($needsAttention) }}</p>
-                        <p class="text-xs text-slate-500 mt-1">
-                            @if($showRecruitment && $showLoans)
-                                Pending · expired · review
-                            @elseif($showRecruitment)
-                                Pending · expired links
-                            @else
-                                Review · processing
-                            @endif
-                        </p>
-                    </div>
-                    <div class="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                </div>
-            </div>
-        @endif
+        </div>
     </div>
 
     {{-- Status + lists --}}
@@ -317,45 +465,9 @@
                     @endforelse
                 </div>
             </div>
-
-            @if($mode === 'analyst')
-                <div class="glass-panel rounded-2xl border-amber-200 overflow-hidden xl:col-span-5">
-                    <div class="px-5 py-4 border-b border-amber-100 flex items-center justify-between bg-amber-50">
-                        <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-lg bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                            </div>
-                            <h3 class="text-sm font-bold text-amber-900">Needs Review Queue</h3>
-                        </div>
-                        <a href="{{ route('loan-applications.index', ['status' => 'needs_review']) }}" class="text-sm font-semibold text-indigo-600 hover:text-indigo-500">View queue</a>
-                    </div>
-                    <div class="divide-y divide-slate-100">
-                        @forelse($needsReviewLoans as $loan)
-                            <div class="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
-                                <div class="min-w-0 flex items-center gap-3">
-                                    <div class="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold shrink-0">
-                                        {{ strtoupper(substr($loan->applicant->name ?? '?', 0, 1)) }}
-                                    </div>
-                                    <div class="min-w-0">
-                                        <p class="text-sm font-semibold text-slate-900 truncate">{{ $loan->applicant->name ?? 'Unknown' }}</p>
-                                        <p class="text-xs text-slate-500 mt-0.5 truncate">
-                                            {{ $loan->applicant->application_reference ?? '—' }}
-                                            @if($loan->outcome)
-                                                · {{ $loan->outcome }}
-                                            @endif
-                                        </p>
-                                    </div>
-                                </div>
-                                <a href="{{ route('loan-applications.report', $loan->id) }}" class="inline-flex items-center px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 hover:bg-amber-100 whitespace-nowrap transition-colors">Review</a>
-                            </div>
-                        @empty
-                            <div class="px-5 py-10 text-center text-sm text-slate-500">No items need review right now.</div>
-                        @endforelse
-                    </div>
-                </div>
-            @endif
         @endif
     </div>
+    @endif
 
     <script>
         (function () {
