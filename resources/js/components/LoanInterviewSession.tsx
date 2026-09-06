@@ -518,8 +518,8 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
             wrapUpStateRef.current === 'saving' ||
             wrapUpStateRef.current === 'submitted'
           ) {
-            return;
-          }
+      return;
+    }
 
           const base64Pcm = uint8ArrayToBase64(new Uint8Array(pcmData.buffer));
 
@@ -704,13 +704,13 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
           systemInstruction,
           temperature: 0.2,
           topP: 0.8,
-          speechConfig: {
+            speechConfig: {
             languageCode: 'en-US',
-            voiceConfig: {
-              prebuiltVoiceConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
                 voiceName: 'Aoede',
-              },
             },
+          },
           },
           // Gemini Live rejects languageCodes; enable transcription with empty config.
           outputAudioTranscription: {},
@@ -939,8 +939,8 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
 
     releaseLocalMedia();
 
-    setIsConnected(false);
-    setIsConnecting(false);
+      setIsConnected(false);
+      setIsConnecting(false);
     setIsMuted(true);
 
     finalizeApplicantTranscript();
@@ -952,26 +952,26 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
 
     const transcriptText = orchestratorRef.current.toSaveFormat('Applicant');
 
-    if (sessionRef.current) {
+      if (sessionRef.current) {
       intentionalCloseRef.current = true;
-      try {
-        sessionRef.current.close();
+        try {
+          sessionRef.current.close();
       } catch {
         // Ignore close errors during teardown.
       }
-      sessionRef.current = null;
-    }
+        sessionRef.current = null;
+      }
 
     // Show thank-you immediately — do not wait on network or extraction.
     setIsSaving(false);
-    setIsCompleted(true);
-    setStage('completed');
+      setIsCompleted(true);
+      setStage('completed');
     wrapUpStateRef.current = 'submitted';
-    setWrapUpState('submitted');
+      setWrapUpState('submitted');
 
-    if (onComplete) {
-      onComplete();
-    }
+      if (onComplete) {
+        onComplete();
+      }
 
     if (!transcriptIdentifier) {
       console.error('Missing interview identifier for background transcript save.');

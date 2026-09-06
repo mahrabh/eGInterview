@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -8,19 +8,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
                     },
-                    colors: {
-                        slate: {
-                            850: '#151e2e',
-                            900: '#0f172a',
-                            950: '#020617',
-                        }
-                    }
                 }
             }
         }
@@ -28,11 +20,138 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
+        .app-shell-bg {
+            background-color: #f8fafc;
+            background-image:
+                radial-gradient(ellipse 80% 50% at 0% -10%, rgba(99, 102, 241, 0.08), transparent 55%),
+                radial-gradient(ellipse 60% 40% at 100% 0%, rgba(59, 130, 246, 0.06), transparent 50%),
+                linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+            background-size: auto, auto, 48px 48px, 48px 48px;
+        }
         .glass-panel {
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        /* Light AI content hero (navbar stays dark via .ai-nav) */
+        .ai-hero {
+            background:
+                linear-gradient(135deg, #ffffff 0%, #f8fafc 40%, #eef2ff 78%, #f0f9ff 100%);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+        }
+        .ai-hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                radial-gradient(circle at 16% 24%, rgba(99, 102, 241, 0.12), transparent 42%),
+                radial-gradient(circle at 88% 14%, rgba(56, 189, 248, 0.10), transparent 38%),
+                linear-gradient(rgba(99, 102, 241, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+            background-size: auto, auto, 32px 32px, 32px 32px;
+            pointer-events: none;
+        }
+        /* Soft moving light — continuous, easy to notice, not flashy */
+        .ai-hero::after {
+            content: '';
+            position: absolute;
+            top: -30%;
+            left: -40%;
+            width: 55%;
+            height: 160%;
+            background: linear-gradient(
+                105deg,
+                transparent 0%,
+                rgba(99, 102, 241, 0.08) 42%,
+                rgba(56, 189, 248, 0.10) 50%,
+                transparent 62%
+            );
+            pointer-events: none;
+            animation: ai-hero-shimmer 7s ease-in-out infinite;
+        }
+        .ai-hero > * { position: relative; z-index: 1; }
+
+        @keyframes ai-hero-shimmer {
+            0% { transform: translateX(0); opacity: 0.45; }
+            50% { opacity: 0.9; }
+            100% { transform: translateX(160%); opacity: 0.45; }
+        }
+        @keyframes ai-hero-badge-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+        @keyframes ai-hero-rise {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .ai-hero-badge {
+            animation: ai-hero-badge-float 3.2s ease-in-out infinite;
+        }
+        .ai-hero-rise {
+            animation: ai-hero-rise 0.85s ease-out both;
+        }
+        .ai-hero-rise-2 {
+            animation: ai-hero-rise 0.85s ease-out 0.18s both;
+        }
+        .ai-hero-rise-3 {
+            animation: ai-hero-rise 0.85s ease-out 0.34s both;
+        }
+        .welcome-type-caret {
+            display: inline-block;
+            margin-left: 2px;
+            color: #6366f1;
+            font-weight: 400;
+            animation: welcome-caret-blink 1s steps(1, end) infinite;
+        }
+        @keyframes welcome-caret-blink {
+            0%, 45% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .ai-hero::after,
+            .ai-hero-badge,
+            .ai-hero-rise,
+            .ai-hero-rise-2,
+            .ai-hero-rise-3 {
+                animation: none !important;
+            }
+            .welcome-type-caret { display: none !important; }
+        }
+
+        /* Dark AI sticky navbar */
+        .ai-nav {
+            background:
+                linear-gradient(105deg, #0f172a 0%, #1e293b 42%, #312e81 78%, #0f172a 100%);
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.22);
+        }
+        .ai-nav::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                radial-gradient(circle at 14% 40%, rgba(99, 102, 241, 0.28), transparent 42%),
+                radial-gradient(circle at 90% 20%, rgba(56, 189, 248, 0.14), transparent 36%),
+                linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+            background-size: auto, auto, 28px 28px, 28px 28px;
+            pointer-events: none;
+        }
+        .ai-nav > * { position: relative; z-index: 1; }
+        .ai-nav-link {
+            color: rgba(203, 213, 225, 0.9);
+        }
+        .ai-nav-link:hover {
+            color: #ffffff;
+        }
+        .ai-nav-link.is-active {
+            color: #a5b4fc;
         }
 
         /* Hide scrollbar globally */
@@ -43,24 +162,20 @@
         .custom-scrollbar { scrollbar-width: thin; -ms-overflow-style: auto; }
         .custom-scrollbar::-webkit-scrollbar { display: block; width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
-        
-        /* Hide scrollbar for Chrome, Safari and Opera */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        /* Hide scrollbar for IE, Edge and Firefox */
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
     </style>
     <script>
         function showTranscript(name, text) {
             document.getElementById('modal-title').innerText = name + "'s Transcript";
             const displayText = text && text.trim() ? text : 'No transcript available.';
-            document.getElementById('modal-body').innerHTML = `<pre class="text-sm text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 p-6 rounded-2xl border border-slate-700/50 leading-relaxed shadow-inner">${displayText}</pre>`;
+            document.getElementById('modal-body').innerHTML = `<pre class="text-sm text-slate-700 whitespace-pre-wrap font-mono bg-slate-50 p-6 rounded-2xl border border-slate-200 leading-relaxed">${displayText}</pre>`;
             document.getElementById('data-modal').classList.remove('hidden');
             document.getElementById('data-modal').classList.add('flex');
             setTimeout(() => {
@@ -72,40 +187,40 @@
         function showEvaluation(name, evalJson) {
             document.getElementById('modal-title').innerText = name + "'s AI Evaluation";
             let data = typeof evalJson === 'string' ? JSON.parse(evalJson) : evalJson;
-            
-            let scoreColor = data.score >= 8 ? 'text-emerald-400' : (data.score >= 5 ? 'text-amber-400' : 'text-rose-400');
-            let scoreBg = data.score >= 8 ? 'bg-emerald-500/10 border-emerald-500/20' : (data.score >= 5 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-rose-500/10 border-rose-500/20');
+
+            let scoreColor = data.score >= 8 ? 'text-emerald-700' : (data.score >= 5 ? 'text-amber-700' : 'text-rose-700');
+            let scoreBg = data.score >= 8 ? 'bg-emerald-50 border-emerald-200' : (data.score >= 5 ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200');
 
             let html = `
-                <div class="flex items-center justify-between mb-8 pb-8 border-b border-slate-800">
+                <div class="flex items-center justify-between mb-8 pb-8 border-b border-slate-200">
                     <div>
-                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Final Score</h3>
-                        <p class="text-xs text-slate-500">Based on technical accuracy</p>
+                        <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Final Score</h3>
+                        <p class="text-xs text-slate-400">Based on technical accuracy</p>
                     </div>
-                    <div class="w-24 h-24 rounded-[2rem] flex items-center justify-center ${scoreBg} border shadow-inner">
-                        <span class="text-4xl font-black ${scoreColor}">${data.score}<span class="text-xl text-slate-500 opacity-50">/10</span></span>
+                    <div class="w-24 h-24 rounded-2xl flex items-center justify-center ${scoreBg} border">
+                        <span class="text-4xl font-black ${scoreColor}">${data.score}<span class="text-xl text-slate-400 opacity-60">/10</span></span>
                     </div>
                 </div>
-                
+
                 <div class="space-y-8">
-                    <div class="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
-                        <h4 class="flex items-center gap-2 text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">
+                    <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                        <h4 class="flex items-center gap-2 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
                             Executive Summary
                         </h4>
-                        <p class="text-sm text-slate-300 leading-relaxed">${data.summary}</p>
+                        <p class="text-sm text-slate-700 leading-relaxed">${data.summary}</p>
                     </div>
-                    
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-emerald-950/20 p-6 rounded-3xl border border-emerald-900/30">
-                            <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">Key Strengths</h4>
-                            <ul class="text-sm text-slate-300 space-y-3">
+                        <div class="bg-emerald-50 p-6 rounded-2xl border border-emerald-100">
+                            <h4 class="text-xs font-bold text-emerald-700 uppercase tracking-widest mb-4">Key Strengths</h4>
+                            <ul class="text-sm text-slate-700 space-y-3">
                                 ${data.strengths?.map(s => `<li class="flex items-start gap-2"><div class="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"></div><span>${s}</span></li>`).join('') || ''}
                             </ul>
                         </div>
-                        
-                        <div class="bg-rose-950/20 p-6 rounded-3xl border border-rose-900/30">
-                            <h4 class="text-xs font-bold text-rose-400 uppercase tracking-widest mb-4">Areas for Improvement</h4>
-                            <ul class="text-sm text-slate-300 space-y-3">
+
+                        <div class="bg-rose-50 p-6 rounded-2xl border border-rose-100">
+                            <h4 class="text-xs font-bold text-rose-700 uppercase tracking-widest mb-4">Areas for Improvement</h4>
+                            <ul class="text-sm text-slate-700 space-y-3">
                                 ${data.weaknesses?.map(w => `<li class="flex items-start gap-2"><div class="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0"></div><span>${w}</span></li>`).join('') || ''}
                             </ul>
                         </div>
@@ -125,12 +240,12 @@
             const body = document.getElementById('modal-body');
 
             if (!photoUrl || photoUrl.trim() === '') {
-                body.innerHTML = '<div class="text-center text-slate-400 py-10">No photo captured.</div>';
+                body.innerHTML = '<div class="text-center text-slate-500 py-10">No photo captured.</div>';
             } else {
                 body.innerHTML = `
                     <div class="flex flex-col items-center justify-center gap-4 p-4">
-                        <img src="${photoUrl}" alt="${name} photo" class="max-h-[70vh] w-auto rounded-[2rem] border border-slate-700 shadow-2xl object-contain" />
-                        <p class="text-sm text-slate-400">Click outside or press ESC to close.</p>
+                        <img src="${photoUrl}" alt="${name} photo" class="max-h-[70vh] w-auto rounded-2xl border border-slate-200 object-contain" />
+                        <p class="text-sm text-slate-500">Click outside or press ESC to close.</p>
                     </div>
                 `;
             }
@@ -152,6 +267,16 @@
             }, 200);
         }
 
+        function toggleMobileNav() {
+            const panel = document.getElementById('mobile-nav-panel');
+            const openIcon = document.getElementById('mobile-nav-open');
+            const closeIcon = document.getElementById('mobile-nav-close');
+            const isHidden = panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', !isHidden);
+            openIcon.classList.toggle('hidden', isHidden);
+            closeIcon.classList.toggle('hidden', !isHidden);
+        }
+
         window.addEventListener('click', function(event) {
             const modal = document.getElementById('data-modal');
             if (modal.classList.contains('flex') && event.target === modal) {
@@ -165,7 +290,6 @@
             }
         });
 
-        // Global flash message auto-hide (visible 5s, then fade out)
         document.addEventListener('DOMContentLoaded', function() {
             const flashMessages = document.querySelectorAll('.flash-message');
             flashMessages.forEach(el => {
@@ -179,95 +303,139 @@
     </script>
 </head>
 
-<body class="bg-slate-950 min-h-screen text-slate-200 antialiased relative selection:bg-indigo-500/30">
-    <!-- Ambient Background Glows -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div class="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px]"></div>
-        <div class="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/5 blur-[120px]"></div>
-    </div>
-
+<body class="app-shell-bg min-h-screen text-slate-700 antialiased relative selection:bg-indigo-500/20">
     <!-- Sticky Header -->
-    <div class="sticky top-0 z-40 w-full bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80">
-        <div class="max-w-7xl mx-auto px-6">
-            <nav class="px-0 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
-                <a href="{{ route('dashboard') }}" class="flex items-center gap-3 group">
-                    {{-- Logo placeholder: replace src with your transparent PNG --}}
-                    <div class="w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 group-hover:scale-105 transition-transform bg-gradient-to-br from-indigo-500 to-blue-600 overflow-hidden">
-                        {{-- <img src="/images/logo.png" alt="eGInterview AI" class="w-full h-full object-contain p-1"> --}}
-                        <span class="text-white font-black text-base">eG</span>
-                    </div>
-                    <div>
-                        <h1 class="text-xl font-black text-white tracking-tight group-hover:text-indigo-300 transition-colors">eGInterview AI</h1>
-                    </div>
-                </a>
-            </div>
+    <header class="ai-nav sticky top-0 z-40 w-full">
+        <div class="h-0.5 w-full bg-gradient-to-r from-indigo-500 via-blue-400 to-cyan-300"></div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6">
+            <nav class="py-3 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <a href="{{ route('dashboard') }}" class="flex items-center gap-3 group min-w-0">
+                        <div class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center border border-white/20 group-hover:scale-105 transition-transform bg-gradient-to-br from-indigo-500 to-blue-600 overflow-hidden shadow-lg shadow-indigo-500/20">
+                            <span class="text-white font-black text-base">eG</span>
+                        </div>
+                        <div class="min-w-0">
+                            <h1 class="text-lg sm:text-xl font-black text-white tracking-tight group-hover:text-indigo-200 transition-colors truncate leading-tight">eGInterview AI</h1>
+                            <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hidden sm:block">AI Interview Platform</p>
+                        </div>
+                    </a>
+                </div>
 
-            <div class="flex flex-col md:flex-row items-center gap-6 w-full md:w-auto mt-4 md:mt-0">
-                <div class="flex items-center gap-6 text-sm font-bold text-slate-400">
-                    {{-- Dashboard: everyone --}}
-                    <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">
+                {{-- Desktop nav --}}
+                <div class="hidden lg:flex items-center gap-6">
+                    <div class="flex items-center gap-5 text-sm font-semibold">
+                        <a href="{{ route('dashboard') }}" class="ai-nav-link {{ request()->routeIs('dashboard') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                            Dashboard
+                        </a>
+                        @if(Auth::check() && Auth::user()->canAccessRecruitment())
+                        <a href="{{ route('recruitment.index') }}" class="ai-nav-link {{ request()->routeIs('recruitment.*') || request()->routeIs('interviews.*') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            Recruitment
+                        </a>
+                        @endif
+                        @if(Auth::check() && Auth::user()->canAccessLoans())
+                        <a href="{{ route('loan-applications.index') }}" class="ai-nav-link {{ request()->routeIs('loan-applications.*') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            Loan Applicants
+                        </a>
+                        @endif
+                        @if(Auth::check() && Auth::user()->isAdmin())
+                        <a href="{{ route('users.index') }}" class="ai-nav-link {{ request()->routeIs('users.*') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                            Users
+                        </a>
+                        <a href="{{ route('plans.index') }}" class="ai-nav-link {{ request()->routeIs('plans.*') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                            Plans
+                        </a>
+                        @endif
+                    </div>
+
+                    <div class="flex items-center gap-3 pl-6 border-l border-white/15">
+                        <a href="{{ route('settings') }}" class="flex items-center gap-3 group" title="Account Settings">
+                            <div class="text-right hidden xl:block">
+                                <p class="text-sm font-bold text-white group-hover:text-indigo-200 transition-colors">{{ Auth::user()->name ?? 'User' }}</p>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{{ Auth::user()->roleLabel() }}</p>
+                            </div>
+                            <span class="w-10 h-10 rounded-xl {{ request()->routeIs('settings') ? 'bg-indigo-500/30 border-indigo-300/40 text-indigo-100' : 'bg-white/10 border-white/15 text-slate-200 group-hover:bg-white/15 group-hover:text-white' }} flex items-center justify-center font-black border transition-all">
+                                {{ substr(Auth::user()->name ?? 'U', 0, 1) }}
+                            </span>
+                        </a>
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-slate-300 hover:text-rose-300 hover:bg-rose-500/20 border border-white/15 hover:border-rose-400/30 transition-all" title="Logout">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {{-- Mobile: compact user actions + hamburger --}}
+                <div class="flex lg:hidden items-center gap-2">
+                    <a href="{{ route('settings') }}" class="w-9 h-9 rounded-xl {{ request()->routeIs('settings') ? 'bg-indigo-500/30 border-indigo-300/40 text-indigo-100' : 'bg-white/10 border-white/15 text-slate-200' }} flex items-center justify-center font-black border text-sm" title="Account Settings">
+                        {{ substr(Auth::user()->name ?? 'U', 0, 1) }}
+                    </a>
+                    <button type="button" onclick="toggleMobileNav()" class="inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 border border-white/15 transition-colors" aria-label="Toggle navigation" aria-controls="mobile-nav-panel">
+                        <svg id="mobile-nav-open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                        <svg id="mobile-nav-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            </nav>
+
+            {{-- Mobile panel --}}
+            <div id="mobile-nav-panel" class="hidden lg:hidden border-t border-white/10 pb-4 pt-2">
+                <div class="flex flex-col gap-1 text-sm font-semibold">
+                    <a href="{{ route('dashboard') }}" class="ai-nav-link {{ request()->routeIs('dashboard') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
                         Dashboard
                     </a>
                     @if(Auth::check() && Auth::user()->canAccessRecruitment())
-                    <a href="{{ route('recruitment.index') }}" class="{{ request()->routeIs('recruitment.*') || request()->routeIs('interviews.*') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">
+                    <a href="{{ route('recruitment.index') }}" class="ai-nav-link {{ request()->routeIs('recruitment.*') || request()->routeIs('interviews.*') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                         Recruitment
                     </a>
                     @endif
                     @if(Auth::check() && Auth::user()->canAccessLoans())
-                    <a href="{{ route('loan-applications.index') }}" class="{{ request()->routeIs('loan-applications.*') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">
+                    <a href="{{ route('loan-applications.index') }}" class="ai-nav-link {{ request()->routeIs('loan-applications.*') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         Loan Applicants
                     </a>
                     @endif
-                    {{-- Users + Plans: admin only --}}
                     @if(Auth::check() && Auth::user()->isAdmin())
-                    <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">
+                    <a href="{{ route('users.index') }}" class="ai-nav-link {{ request()->routeIs('users.*') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                         Users
                     </a>
-                    <a href="{{ route('plans.index') }}" class="{{ request()->routeIs('plans.*') ? 'text-indigo-400' : 'hover:text-white' }} transition-colors flex items-center gap-2">
+                    <a href="{{ route('plans.index') }}" class="ai-nav-link {{ request()->routeIs('plans.*') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                         Plans
                     </a>
                     @endif
                 </div>
 
-                <div class="flex items-center gap-3 md:pl-6 md:border-l border-slate-800 w-full md:w-auto justify-between md:justify-start">
-                    <div class="flex items-center gap-3">
-                        <div class="text-right hidden sm:block">
-                            <p class="text-sm font-bold text-white">{{ Auth::user()->name ?? 'User' }}</p>
-                            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{{ Auth::user()->roleLabel() }}</p>
-                        </div>
-                        <a href="{{ route('settings') }}" class="w-10 h-10 rounded-2xl {{ request()->routeIs('settings') ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500/20' }} flex items-center justify-center font-black border shadow-inner transition-all" title="Account Settings">
-                            {{ substr(Auth::user()->name ?? 'U', 0, 1) }}
-                        </a>
+                <div class="mt-3 pt-3 border-t border-white/10 flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-sm font-bold text-white truncate">{{ Auth::user()->name ?? 'User' }}</p>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{{ Auth::user()->roleLabel() }}</p>
                     </div>
-                    {{-- Settings icon --}}
-                    <a href="{{ route('settings') }}" class="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 border border-slate-800 hover:border-indigo-500/20 transition-all" title="Account Settings">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                    </a>
-                    {{-- Logout --}}
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
-                        <button type="submit" class="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/20 transition-all" title="Logout">
+                        <button type="submit" class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-slate-300 hover:text-rose-300 hover:bg-rose-500/20 border border-white/15 transition-all" title="Logout">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                         </button>
                     </form>
                 </div>
             </div>
-        </nav>
         </div>
-    </div>
+    </header>
 
     <!-- Main Content Area -->
-    <div class="max-w-7xl mx-auto px-6 pb-8 pt-6 relative z-10 flex-1 w-full">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-8 pt-6 relative z-10 flex-1 w-full">
         <main>
             @if (isset($header))
-                <header class="mb-8 border-b border-slate-800 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <h2 class="text-2xl font-black text-white tracking-tight">{{ $header }}</h2>
+                <header class="mb-8 border-b border-slate-200 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <h2 class="text-2xl font-black text-slate-900 tracking-tight">{{ $header }}</h2>
                 </header>
             @endif
             {{ $slot }}
@@ -275,15 +443,15 @@
     </div>
 
     <!-- Data Modal -->
-    <div id="data-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-        <div id="modal-content" class="bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden transform scale-95 opacity-0 transition-all duration-300">
-            <div class="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-                <h2 id="modal-title" class="text-lg font-black text-white tracking-tight">Data View</h2>
-                <button onclick="closeModal()" class="text-slate-400 hover:text-rose-400 w-10 h-10 flex items-center justify-center bg-slate-800 hover:bg-rose-500/10 rounded-full border border-transparent hover:border-rose-500/20 transition-all">
+    <div id="data-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div id="modal-content" class="bg-white border border-slate-200 rounded-3xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden transform scale-95 opacity-0 transition-all duration-300">
+            <div class="px-6 sm:px-8 py-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h2 id="modal-title" class="text-lg font-black text-slate-900 tracking-tight">Data View</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-rose-600 w-10 h-10 flex items-center justify-center bg-white hover:bg-rose-50 rounded-full border border-slate-200 hover:border-rose-200 transition-all">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <div id="modal-body" class="p-8 overflow-y-auto flex-1 no-scrollbar"></div>
+            <div id="modal-body" class="p-6 sm:p-8 overflow-y-auto flex-1 no-scrollbar"></div>
         </div>
     </div>
 

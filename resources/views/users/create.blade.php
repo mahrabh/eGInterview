@@ -1,161 +1,195 @@
 <x-dark-layout>
-    <div class="max-w-4xl mx-auto">
-
-        {{-- Page Header --}}
-        <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-            <div>
-                <h2 class="text-4xl font-black text-white tracking-tight">Create User</h2>
-                <p class="text-slate-400 mt-2 text-sm font-medium">Add a new workspace user and assign Analyst or Recruiter role.</p>
-            </div>
-            <a href="{{ route('users.index') }}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-bold text-xs text-slate-300 uppercase tracking-widest transition-all">
-                ← Back to Users
-            </a>
+    <div class="mb-3 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+            <h2 class="text-lg font-bold text-slate-900 tracking-tight">Create User</h2>
+            <p class="text-xs text-slate-500 mt-0.5 truncate">Add a workspace user — Analyst or Recruiter.</p>
         </div>
-
-        <form method="POST" action="{{ route('users.store') }}">
-            @csrf
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {{-- LEFT: Preview Card --}}
-                <div class="lg:col-span-1">
-                    <div class="glass-panel border border-slate-800 rounded-[2rem] p-8 shadow-2xl text-center relative overflow-hidden">
-                        <div class="absolute top-[-30%] left-[-20%] w-[70%] h-[70%] rounded-full bg-indigo-600/15 blur-[80px] pointer-events-none"></div>
-                        <div class="absolute bottom-[-20%] right-[-20%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[60px] pointer-events-none"></div>
-
-                        <div class="relative z-10 space-y-5">
-                            <div class="w-24 h-24 mx-auto rounded-[2rem] bg-gradient-to-br from-indigo-500 via-blue-500 to-purple-600 flex items-center justify-center text-white font-black text-4xl shadow-xl shadow-indigo-500/25 border-2 border-white/10">
-                                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                            </div>
-
-                            <div>
-                                <h3 class="text-xl font-black text-white tracking-tight">New Workspace User</h3>
-                                <p class="text-sm text-slate-400 mt-1">Assign Analyst or Recruiter access</p>
-                            </div>
-
-                            <span class="inline-flex px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] rounded-full bg-slate-800 border border-slate-700 text-slate-400">
-                                Workspace User
-                            </span>
-
-                            <div class="pt-4 border-t border-slate-800/50 text-left space-y-3">
-                                <div class="flex items-center gap-3 text-xs text-slate-400">
-                                    <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                    Access to Dashboard & Interviews
-                                </div>
-                                <div class="flex items-center gap-3 text-xs text-slate-400">
-                                    <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                    Import candidates & generate questions
-                                </div>
-                                <div class="flex items-center gap-3 text-xs text-slate-400">
-                                    <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                    View evaluations & transcripts
-                                </div>
-                                <div class="flex items-center gap-3 text-xs text-slate-400">
-                                    <svg class="w-4 h-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                    No access to Users & Plans
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- RIGHT: Form --}}
-                <div class="lg:col-span-2 space-y-8">
-
-                    {{-- Credentials --}}
-                    <div class="glass-panel border border-slate-800 rounded-[2rem] shadow-2xl overflow-hidden">
-                        <div class="px-8 py-5 border-b border-slate-800/50 bg-slate-900/30 flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-                                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                            </div>
-                            <div>
-                                <h3 class="text-sm font-black text-white uppercase tracking-widest">Account Credentials</h3>
-                                <p class="text-[11px] text-slate-500 mt-0.5">Set the recruiter's login details.</p>
-                            </div>
-                        </div>
-
-                        <div class="p-8">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label for="name" class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Full Name</label>
-                                    <input id="name" type="text" name="name" value="{{ old('name') }}" required autofocus
-                                        class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
-                                        placeholder="John Smith">
-                                    <x-input-error :messages="$errors->get('name')" class="mt-2 text-rose-400 text-sm font-bold" />
-                                </div>
-
-                                <div>
-                                    <label for="email" class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Email Address</label>
-                                    <input id="email" type="email" name="email" value="{{ old('email') }}" required
-                                        class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
-                                        placeholder="recruiter@company.com">
-                                    <x-input-error :messages="$errors->get('email')" class="mt-2 text-rose-400 text-sm font-bold" />
-                                </div>
-
-                                <div>
-                                    <label for="password" class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Password</label>
-                                    <input id="password" type="password" name="password" required
-                                        class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
-                                        placeholder="Min. 8 characters">
-                                    <x-input-error :messages="$errors->get('password')" class="mt-2 text-rose-400 text-sm font-bold" />
-                                </div>
-
-                                <div>
-                                    <label for="password_confirmation" class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Confirm Password</label>
-                                    <input id="password_confirmation" type="password" name="password_confirmation" required
-                                        class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
-                                        placeholder="Re-enter password">
-                                </div>
-
-                                <div class="md:col-span-2">
-                                    <label for="role" class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Workspace Role</label>
-                                    <select id="role" name="role" required
-                                        class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium">
-                                        <option value="analyst" {{ old('role', 'analyst') === 'analyst' ? 'selected' : '' }}>Analyst</option>
-                                        <option value="recruiter" {{ old('role') === 'recruiter' ? 'selected' : '' }}>Recruiter</option>
-                                    </select>
-                                    <p class="text-[11px] text-slate-500 mt-2">This label is shown in the top-right corner when the user logs in.</p>
-                                    <x-input-error :messages="$errors->get('role')" class="mt-2 text-rose-400 text-sm font-bold" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {{-- Plan Assignment --}}
-                    <div class="glass-panel border border-slate-800 rounded-[2rem] shadow-2xl overflow-hidden">
-                        <div class="px-8 py-5 border-b border-slate-800/50 bg-slate-900/30 flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                            </div>
-                            <div>
-                                <h3 class="text-sm font-black text-white uppercase tracking-widest">Plan Assignment</h3>
-                                <p class="text-[11px] text-slate-500 mt-0.5">Optional — can be assigned later from the users list.</p>
-                            </div>
-                        </div>
-
-                        <div class="p-8">
-                            <select id="plan_id" name="plan_id"
-                                class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3.5 text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium">
-                                <option value="">— No Plan Assigned —</option>
-                                @foreach($plans as $plan)
-                                    <option value="{{ $plan->id }}" {{ old('plan_id') == $plan->id ? 'selected' : '' }}>
-                                        {{ $plan->name }} — ৳{{ number_format($plan->price, 2) }}/mo
-                                    </option>
-                                @endforeach
-                            </select>
-                            <x-input-error :messages="$errors->get('plan_id')" class="mt-2 text-rose-400 text-sm font-bold" />
-
-                            <div class="flex items-center justify-end mt-6 pt-6 border-t border-slate-800/50 gap-4">
-                                <a href="{{ route('users.index') }}" class="text-sm font-bold text-slate-400 hover:text-white transition-colors">Cancel</a>
-                                <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.4)] flex items-center gap-2">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                                    Create User
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </form>
+        <a href="{{ route('users.index') }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 transition-colors shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            Back
+        </a>
     </div>
+
+    <form method="POST" action="{{ route('users.store') }}" id="create-user-form">
+        @csrf
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            {{-- Summary --}}
+            <aside class="lg:col-span-4">
+                <div class="glass-panel rounded-xl overflow-hidden h-full">
+                    <div class="px-4 py-3 bg-gradient-to-br from-slate-50 via-indigo-50/50 to-cyan-50/40 border-b border-slate-200/80">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                            </div>
+                            <div class="min-w-0">
+                                <h3 class="text-sm font-bold text-slate-900">New workspace user</h3>
+                                <p class="text-[11px] text-slate-500">Analyst or Recruiter access</p>
+                            </div>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-1">
+                            <span class="inline-flex px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full bg-white border border-slate-200 text-slate-600">Workspace</span>
+                            <span class="inline-flex px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600">AI access</span>
+                        </div>
+                    </div>
+
+                    <div class="p-3.5 space-y-2">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">What they get</p>
+                        <div class="flex items-center gap-2 text-xs text-slate-600">
+                            <span class="w-4 h-4 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                            </span>
+                            Dashboard & interviews
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-slate-600">
+                            <span class="w-4 h-4 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                            </span>
+                            Import & generate questions
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-slate-600">
+                            <span class="w-4 h-4 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                            </span>
+                            Evaluations & transcripts
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-slate-600">
+                            <span class="w-4 h-4 rounded bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </span>
+                            No Users & Plans access
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            {{-- Form --}}
+            <section class="lg:col-span-8">
+                <div class="glass-panel rounded-xl overflow-hidden flex flex-col">
+                    <div class="px-4 py-2.5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50/40 flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                            <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-900">Account credentials</h3>
+                            <p class="text-[11px] text-slate-500">Login, role, and optional plan</p>
+                        </div>
+                    </div>
+
+                    <div class="p-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label for="name" class="block text-xs font-semibold text-slate-700 mb-1">Full name</label>
+                                <input id="name" type="text" name="name" value="{{ old('name') }}" required autofocus
+                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                                    placeholder="John Smith">
+                                <x-input-error :messages="$errors->get('name')" class="mt-1 text-rose-600 text-xs" />
+                            </div>
+
+                            <div>
+                                <label for="email" class="block text-xs font-semibold text-slate-700 mb-1">Email address</label>
+                                <input id="email" type="email" name="email" value="{{ old('email') }}" required
+                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                                    placeholder="recruiter@company.com">
+                                <x-input-error :messages="$errors->get('email')" class="mt-1 text-rose-600 text-xs" />
+                            </div>
+
+                            <div>
+                                <label for="password" class="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                                <input id="password" type="password" name="password" required
+                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                                    placeholder="Min. 8 characters">
+                                <x-input-error :messages="$errors->get('password')" class="mt-1 text-rose-600 text-xs" />
+                            </div>
+
+                            <div>
+                                <label for="password_confirmation" class="block text-xs font-semibold text-slate-700 mb-1">Confirm password</label>
+                                <input id="password_confirmation" type="password" name="password_confirmation" required
+                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                                    placeholder="Re-enter password">
+                            </div>
+
+                            <div>
+                                <label for="role" class="block text-xs font-semibold text-slate-700 mb-1">Workspace role</label>
+                                <select id="role" name="role" required
+                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all">
+                                    <option value="analyst" {{ old('role', 'analyst') === 'analyst' ? 'selected' : '' }}>Analyst — Loan Applicants only</option>
+                                    <option value="recruiter" {{ old('role') === 'recruiter' ? 'selected' : '' }}>Recruiter — Recruitment only</option>
+                                </select>
+                                <x-input-error :messages="$errors->get('role')" class="mt-1 text-rose-600 text-xs" />
+                            </div>
+
+                            <div>
+                                <label for="plan_id" class="block text-xs font-semibold text-slate-700 mb-1">Plan assignment</label>
+                                <select id="plan_id" name="plan_id"
+                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all">
+                                    <option value="">— No plan assigned —</option>
+                                    @foreach($plans as $plan)
+                                        <option value="{{ $plan->id }}" {{ old('plan_id') == $plan->id ? 'selected' : '' }}>
+                                            {{ $plan->name }} — ৳{{ number_format($plan->price, 2) }}/mo
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <x-input-error :messages="$errors->get('plan_id')" class="mt-1 text-rose-600 text-xs" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Actions stay visible near bottom of card / screen --}}
+                    <div class="sticky bottom-0 px-4 py-3 border-t border-slate-200 bg-white/95 backdrop-blur-sm flex items-center justify-end gap-3">
+                        <a href="{{ route('users.index') }}" class="text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors px-2 py-1.5">Cancel</a>
+                        <button type="submit" id="create-user-btn" class="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors min-w-[132px]">
+                            <svg id="create-user-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            <svg id="create-user-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                            <span id="create-user-text">Create User</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </form>
+
+    <script>
+        (function () {
+            const form = document.getElementById('create-user-form');
+            if (!form) return;
+
+            const btn = document.getElementById('create-user-btn');
+            const icon = document.getElementById('create-user-icon');
+            const spinner = document.getElementById('create-user-spinner');
+            const text = document.getElementById('create-user-text');
+
+            function resetBtn() {
+                if (!btn) return;
+                btn.disabled = false;
+                btn.classList.remove('opacity-80', 'cursor-not-allowed', 'pointer-events-none');
+                if (icon) icon.classList.remove('hidden');
+                if (spinner) spinner.classList.add('hidden');
+                if (text) text.textContent = 'Create User';
+            }
+
+            form.addEventListener('submit', function () {
+                if (icon) icon.classList.add('hidden');
+                if (spinner) spinner.classList.remove('hidden');
+                if (text) text.textContent = 'Creating...';
+                if (btn) btn.classList.add('opacity-80', 'pointer-events-none');
+                setTimeout(function () {
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.classList.add('cursor-not-allowed');
+                    }
+                }, 50);
+                setTimeout(function () {
+                    if (text && text.textContent === 'Creating...') resetBtn();
+                }, 8000);
+            });
+
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) resetBtn();
+            });
+        })();
+    </script>
 </x-dark-layout>
