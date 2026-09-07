@@ -50,6 +50,15 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        $user = Auth::user();
+        if ($user && $user->isExpired()) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'Your account access has expired. Please contact an administrator.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 

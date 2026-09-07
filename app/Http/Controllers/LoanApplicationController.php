@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\PlanQuotaExceededException;
 use App\Models\LoanApplicant;
 use App\Models\LoanApplication;
 use App\Models\User;
+use App\Services\PlanQuotaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +15,10 @@ use Illuminate\Support\Facades\Gate;
 
 class LoanApplicationController extends Controller
 {
+    public function __construct(private PlanQuotaService $planQuota)
+    {
+    }
+
     public function index(Request $request)
     {
         Gate::authorize('viewAny', LoanApplication::class);
@@ -25,7 +31,7 @@ class LoanApplicationController extends Controller
                 $q->where('created_by', $request->user()->id);
             });
         } else {
-            $users = User::whereIn('role', ['admin', 'analyst'])->orderBy('name')->get();
+            $users = User::whereIn('role', ['admin', 'analyst', 'both'])->orderBy('name')->get();
 
             if ($request->filled('user_id')) {
                 $query->whereHas('applicant', function ($q) use ($request) {
@@ -99,17 +105,40 @@ class LoanApplicationController extends Controller
         $errorCount = 0;
         $duplicateCount = 0;
         $invalidCount = 0;
+        $quotaSkipped = 0;
         $rowCount = 0;
-        $ownerId = $request->user()->id;
+        $user = $request->user();
+        $user->loadMissing('plan');
+        $ownerId = $user->id;
+
+        try {
+            $this->planQuota->assertCanCreateLoan($user, 1);
+        } catch (PlanQuotaExceededException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         DB::beginTransaction();
         try {
             $reader = \Spatie\SimpleExcel\SimpleExcelReader::create($file->getRealPath(), $extension);
+            $stopImport = false;
 
-            $reader->getRows()->each(function (array $row) use (&$successCount, &$errorCount, &$duplicateCount, &$invalidCount, &$rowCount, $ownerId) {
+            $reader->getRows()->each(function (array $row) use (
+                &$successCount,
+                &$errorCount,
+                &$duplicateCount,
+                &$invalidCount,
+                &$quotaSkipped,
+                &$rowCount,
+                &$stopImport,
+                $user,
+                $ownerId
+            ) {
+                if ($stopImport) {
+                    return;
+                }
+
                 $rowCount++;
 
-                // standardize keys
                 $row = array_change_key_case($row, CASE_LOWER);
                 $name = isset($row['applicant_name']) ? trim((string) $row['applicant_name']) : '';
                 $phone = $row['phone_number'] ?? null;
@@ -131,7 +160,6 @@ class LoanApplicationController extends Controller
                 $phoneHash = hash('sha256', $phone);
                 $reference = 'LA-' . strtoupper(Str::random(8));
 
-                // Duplicates are scoped per recruiter/workspace owner, not globally.
                 $existing = LoanApplicant::where('phone_hash', $phoneHash)
                     ->where('created_by', $ownerId)
                     ->first();
@@ -142,20 +170,27 @@ class LoanApplicationController extends Controller
                     return;
                 }
 
-                $applicant = LoanApplicant::create([
-                    'name' => $name,
-                    'phone' => $phone,
-                    'application_reference' => $reference,
-                    'created_by' => $ownerId,
-                ]);
+                try {
+                    $this->planQuota->withLoanSlot($user, function () use ($name, $phone, $reference, $ownerId, &$successCount) {
+                        $applicant = LoanApplicant::create([
+                            'name' => $name,
+                            'phone' => $phone,
+                            'application_reference' => $reference,
+                            'created_by' => $ownerId,
+                        ]);
 
-                LoanApplication::create([
-                    'loan_applicant_id' => $applicant->id,
-                    'loan_type' => null, // null until confirmed in AI interview
-                    'status' => 'draft',
-                ]);
+                        LoanApplication::create([
+                            'loan_applicant_id' => $applicant->id,
+                            'loan_type' => null,
+                            'status' => 'draft',
+                        ]);
 
-                $successCount++;
+                        $successCount++;
+                    });
+                } catch (PlanQuotaExceededException $e) {
+                    $quotaSkipped++;
+                    $stopImport = true;
+                }
             });
             DB::commit();
         } catch (\Exception $e) {
@@ -168,6 +203,10 @@ class LoanApplicationController extends Controller
                 'error',
                 'No applicant rows found. Download the template, add rows with applicant_name and phone_number, then import again.'
             );
+        }
+
+        if ($successCount === 0 && $quotaSkipped > 0) {
+            return back()->with('error', 'You have reached your monthly Loan interview quota. Please upgrade your plan or wait until next month.');
         }
 
         if ($successCount === 0 && $duplicateCount > 0 && $invalidCount === 0) {
@@ -187,6 +226,9 @@ class LoanApplicationController extends Controller
                 $parts[] = "invalid rows: {$invalidCount}";
             }
             $message .= ' Skipped (' . implode(', ', $parts) . ').';
+        }
+        if ($quotaSkipped > 0) {
+            $message .= ' Monthly loan quota reached; remaining rows were not imported.';
         }
 
         return back()->with('success', $message);
@@ -252,6 +294,9 @@ class LoanApplicationController extends Controller
     {
         $application = LoanApplication::findOrFail($id);
         Gate::authorize('update', $application);
+
+        // Existing applicants already counted at import; never block for later quota.
+        $this->planQuota->assertExistingRecordLinkAllowed(auth()->user());
 
         $expiry = now()->addHours(48);
         // Deterministic token so UI can recreate and display it persistently without DB plaintext storage

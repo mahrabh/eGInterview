@@ -1,5 +1,5 @@
 <x-dark-layout>
-    <div class="mb-3 flex items-center justify-between gap-3">
+    <div class="max-w-4xl mx-auto mb-3 flex items-center justify-between gap-3">
         <div class="min-w-0">
             <h2 class="text-lg font-bold text-slate-900 tracking-tight">Edit User</h2>
             <p class="text-xs text-slate-500 mt-0.5 truncate">Update credentials for <span class="text-indigo-600 font-medium">{{ $user->name }}</span>.</p>
@@ -10,89 +10,39 @@
         </a>
     </div>
 
+    @if(session('info'))
+        <div class="max-w-4xl mx-auto mb-3 flash-message bg-amber-50 text-amber-800 px-4 py-2.5 rounded-lg border border-amber-200 text-xs font-semibold">
+            {{ session('info') }}
+        </div>
+    @endif
+
     <form method="POST" action="{{ route('users.update', $user) }}" id="edit-user-form">
         @csrf
         @method('PUT')
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
-            {{-- Summary --}}
-            <aside class="lg:col-span-4">
-                <div class="glass-panel rounded-xl overflow-hidden h-full">
-                    <div class="px-4 py-3 bg-gradient-to-br from-slate-50 via-indigo-50/50 to-cyan-50/40 border-b border-slate-200/80">
-                        <div class="flex items-center gap-2.5">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-sm font-black shrink-0">
-                                {{ strtoupper(substr($user->name, 0, 1)) }}
-                            </div>
-                            <div class="min-w-0">
-                                <h3 class="text-sm font-bold text-slate-900 truncate">{{ $user->name }}</h3>
-                                <p class="text-[11px] text-slate-500 truncate">{{ $user->email }}</p>
-                            </div>
-                        </div>
-                        <div class="mt-2 flex flex-wrap gap-1">
-                            <span class="inline-flex px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full border
-                                {{ $user->isAnalyst() ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-violet-50 text-violet-700 border-violet-200' }}">
-                                {{ $user->roleLabel() }}
-                            </span>
-                            @if($user->plan)
-                                <span class="inline-flex px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full bg-white border border-slate-200 text-slate-600">
-                                    {{ $user->plan->name }}
-                                </span>
-                            @else
-                                <span class="inline-flex px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full bg-slate-100 border border-slate-200 text-slate-500">
-                                    No plan
-                                </span>
-                            @endif
-                        </div>
+        <div class="max-w-4xl mx-auto">
+            <div class="glass-panel rounded-xl overflow-hidden flex flex-col">
+                <div class="px-4 py-2.5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50/40 flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-black">
+                        {{ strtoupper(substr($user->name, 0, 1)) }}
                     </div>
-
-                    <div class="p-3.5 space-y-2">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Workspace access</p>
-                        <div class="flex items-center gap-2 text-xs text-slate-600">
-                            <span class="w-4 h-4 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                            Dashboard & interviews
-                        </div>
-                        <div class="flex items-center gap-2 text-xs text-slate-600">
-                            <span class="w-4 h-4 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                            Role-based module access
-                        </div>
-                        <div class="flex items-center gap-2 text-xs text-slate-600">
-                            <span class="w-4 h-4 rounded bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-                            </span>
-                            No Users & Plans access
-                        </div>
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-bold text-slate-900 truncate">{{ $user->name }}</h3>
+                        <p class="text-[11px] text-slate-500 truncate">{{ $user->email }} · {{ $user->roleLabel() }}</p>
                     </div>
                 </div>
-            </aside>
 
-            {{-- Form --}}
-            <section class="lg:col-span-8">
-                <div class="glass-panel rounded-xl overflow-hidden flex flex-col">
-                    <div class="px-4 py-2.5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50/40 flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                            <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                        </div>
+                <div class="p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                            <h3 class="text-sm font-bold text-slate-900">Account credentials</h3>
-                            <p class="text-[11px] text-slate-500">Login, role, and optional plan</p>
+                            <label for="name" class="block text-xs font-semibold text-slate-700 mb-1">Full name</label>
+                            <input id="name" type="text" name="name" value="{{ old('name', $user->name) }}" required autofocus
+                                class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all">
+                            <x-input-error :messages="$errors->get('name')" class="mt-1 text-rose-600 text-xs" />
                         </div>
-                    </div>
 
-                    <div class="p-4">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <label for="name" class="block text-xs font-semibold text-slate-700 mb-1">Full name</label>
-                                <input id="name" type="text" name="name" value="{{ old('name', $user->name) }}" required autofocus
-                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all">
-                                <x-input-error :messages="$errors->get('name')" class="mt-1 text-rose-600 text-xs" />
-                            </div>
-
-                            <div>
-                                <label for="email" class="block text-xs font-semibold text-slate-700 mb-1">Email address</label>
+                        <div>
+                            <label for="email" class="block text-xs font-semibold text-slate-700 mb-1">Email address</label>
                                 <input id="email" type="email" name="email" value="{{ old('email', $user->email) }}" required
                                     class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all">
                                 <x-input-error :messages="$errors->get('email')" class="mt-1 text-rose-600 text-xs" />
@@ -114,45 +64,78 @@
                                     placeholder="Re-enter new password">
                             </div>
 
-                            <div>
-                                <label for="role" class="block text-xs font-semibold text-slate-700 mb-1">Workspace role</label>
-                                <select id="role" name="role" required
-                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all">
-                                    <option value="analyst" {{ old('role', $user->role) === 'analyst' ? 'selected' : '' }}>Analyst — Loan Applicants only</option>
-                                    <option value="recruiter" {{ old('role', $user->role) === 'recruiter' ? 'selected' : '' }}>Recruiter — Recruitment only</option>
-                                </select>
-                                <x-input-error :messages="$errors->get('role')" class="mt-1 text-rose-600 text-xs" />
+                            <div class="md:col-span-2">
+                                <p class="block text-xs font-semibold text-slate-700 mb-2">Workspace roles</p>
+                                @php
+                                    $defaultRoles = match ($user->role) {
+                                        'both' => ['recruiter', 'analyst'],
+                                        'recruiter' => ['recruiter'],
+                                        default => ['analyst'],
+                                    };
+                                    $selectedRoles = old('roles', $defaultRoles);
+                                    if (!is_array($selectedRoles)) {
+                                        $selectedRoles = [$selectedRoles];
+                                    }
+                                @endphp
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <label class="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50 hover:border-indigo-200 cursor-pointer">
+                                        <input type="checkbox" name="roles[]" value="recruiter" class="role-checkbox mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30" {{ in_array('recruiter', $selectedRoles, true) ? 'checked' : '' }}>
+                                        <span>
+                                            <span class="block text-xs font-semibold text-slate-900">Recruiter</span>
+                                            <span class="block text-[11px] text-slate-500 mt-0.5">Recruitment panel access</span>
+                                        </span>
+                                    </label>
+                                    <label class="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50 hover:border-indigo-200 cursor-pointer">
+                                        <input type="checkbox" name="roles[]" value="analyst" class="role-checkbox mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30" {{ in_array('analyst', $selectedRoles, true) ? 'checked' : '' }}>
+                                        <span>
+                                            <span class="block text-xs font-semibold text-slate-900">Analyst</span>
+                                            <span class="block text-[11px] text-slate-500 mt-0.5">Loan Applicants panel access</span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <p class="text-[11px] text-slate-500 mt-1.5">Select both for Combined plan users who need recruitment and loan access.</p>
+                                <x-input-error :messages="$errors->get('roles')" class="mt-1 text-rose-600 text-xs" />
                             </div>
 
-                            <div>
+                            <div class="md:col-span-2">
                                 <label for="plan_id" class="block text-xs font-semibold text-slate-700 mb-1">Assigned plan</label>
                                 <select id="plan_id" name="plan_id"
                                     class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all">
                                     <option value="">— No plan —</option>
                                     @foreach($plans as $plan)
-                                        <option value="{{ $plan->id }}" {{ old('plan_id', $user->plan_id) == $plan->id ? 'selected' : '' }}>
-                                            {{ $plan->name }} — ৳{{ number_format($plan->price, 2) }}/mo
+                                        <option
+                                            value="{{ $plan->id }}"
+                                            data-roles="{{ implode(',', $plan->moduleTypeEnum()->compatibleRoles()) }}"
+                                            data-active="{{ $plan->is_active ? '1' : '0' }}"
+                                            {{ old('plan_id', $user->plan_id) == $plan->id ? 'selected' : '' }}
+                                        >
+                                            {{ $plan->name }} · {{ $plan->moduleLabel() }}{{ $plan->is_active ? '' : ' (inactive)' }} — ${{ number_format($plan->price, 2) }}/mo
                                         </option>
                                     @endforeach
                                 </select>
                                 <x-input-error :messages="$errors->get('plan_id')" class="mt-1 text-rose-600 text-xs" />
                             </div>
+
+                            <x-expiry-date-field :value="old('expires_at', optional($user->expires_at)->format('Y-m-d'))" />
                         </div>
                     </div>
 
-                    <div class="sticky bottom-0 px-4 py-3 border-t border-slate-200 bg-white/95 backdrop-blur-sm flex items-center justify-end gap-3">
-                        <a href="{{ route('users.index') }}" class="text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors px-2 py-1.5">Cancel</a>
-                        <button type="submit" id="edit-user-btn" class="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors min-w-[132px]">
-                            <svg id="edit-user-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                            <svg id="edit-user-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                            </svg>
-                            <span id="edit-user-text">Update User</span>
-                        </button>
+                    <div class="sticky bottom-0 px-4 py-3 border-t border-slate-200 bg-white/95 backdrop-blur-sm flex flex-col gap-2">
+                        <p id="edit-user-hint" class="hidden text-xs font-semibold text-amber-700 text-right">No changes to save.</p>
+                        <div class="flex items-center justify-end gap-3">
+                            <a href="{{ route('users.index') }}" class="text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors px-2 py-1.5">Cancel</a>
+                            <button type="submit" id="edit-user-btn" class="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors min-w-[132px]">
+                                <svg id="edit-user-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                <svg id="edit-user-spinner" class="w-4 h-4 animate-spin hidden" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                </svg>
+                                <span id="edit-user-text">Update User</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </section>
+            </div>
         </div>
     </form>
 
@@ -165,6 +148,63 @@
             const icon = document.getElementById('edit-user-icon');
             const spinner = document.getElementById('edit-user-spinner');
             const text = document.getElementById('edit-user-text');
+            const hint = document.getElementById('edit-user-hint');
+            const roleBoxes = Array.from(form.querySelectorAll('.role-checkbox'));
+            const planSelect = document.getElementById('plan_id');
+            const currentPlanId = @json(old('plan_id', $user->plan_id));
+
+            function serializeForm(target) {
+                const data = new FormData(target);
+                const pairs = [];
+                data.forEach(function (value, key) {
+                    if (key === '_token' || key === '_method') return;
+                    pairs.push(key + '=' + String(value));
+                });
+                pairs.sort();
+                return pairs.join('&');
+            }
+
+            function selectedRoleValue() {
+                const selected = roleBoxes.filter(function (box) { return box.checked; }).map(function (box) { return box.value; });
+                if (selected.indexOf('recruiter') !== -1 && selected.indexOf('analyst') !== -1) return 'both';
+                if (selected.length === 1) return selected[0];
+                return '';
+            }
+
+            function filterPlans() {
+                if (!planSelect) return;
+                const role = selectedRoleValue();
+                Array.from(planSelect.options).forEach(function (option) {
+                    if (!option.value) {
+                        option.hidden = false;
+                        return;
+                    }
+                    const roles = (option.getAttribute('data-roles') || '').split(',');
+                    const isActive = option.getAttribute('data-active') !== '0';
+                    const isCurrent = String(option.value) === String(currentPlanId || '');
+                    const compatible = !role || roles.indexOf(role) !== -1;
+                    option.hidden = !(compatible && (isActive || isCurrent));
+                    if (option.hidden && option.selected) {
+                        planSelect.value = '';
+                    }
+                });
+            }
+
+            roleBoxes.forEach(function (box) {
+                box.addEventListener('change', filterPlans);
+            });
+            filterPlans();
+
+            const initialSnapshot = serializeForm(form);
+
+            function showNoChanges() {
+                if (!hint) return;
+                hint.classList.remove('hidden');
+                clearTimeout(showNoChanges._timer);
+                showNoChanges._timer = setTimeout(function () {
+                    hint.classList.add('hidden');
+                }, 2500);
+            }
 
             function resetBtn() {
                 if (!btn) return;
@@ -175,7 +215,14 @@
                 if (text) text.textContent = 'Update User';
             }
 
-            form.addEventListener('submit', function () {
+            form.addEventListener('submit', function (event) {
+                if (serializeForm(form) === initialSnapshot) {
+                    event.preventDefault();
+                    showNoChanges();
+                    return;
+                }
+
+                if (hint) hint.classList.add('hidden');
                 if (icon) icon.classList.add('hidden');
                 if (spinner) spinner.classList.remove('hidden');
                 if (text) text.textContent = 'Updating...';

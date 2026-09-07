@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\PlanQuotaExceededException;
 use App\Models\User;
 use App\Models\Interview;
+use App\Services\PlanQuotaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
@@ -13,6 +15,10 @@ use Spatie\SimpleExcel\SimpleExcelReader;
 
 class InterviewController extends Controller
 {
+    public function __construct(private PlanQuotaService $planQuota)
+    {
+    }
+
     public function index(Request $request)
     {
         Gate::authorize('viewAny', Interview::class);
@@ -25,7 +31,7 @@ class InterviewController extends Controller
         if (!auth()->user()->isAdmin()) {
             $query->where('user_id', auth()->id());
         } else {
-            $users = User::whereIn('role', ['admin', 'recruiter'])->orderBy('name')->get();
+            $users = User::whereIn('role', ['admin', 'recruiter', 'both'])->orderBy('name')->get();
             if ($request->filled('user_id')) {
                 $query->where('user_id', $request->user_id);
             }
@@ -87,26 +93,19 @@ class InterviewController extends Controller
             }
 
             $user = auth()->user();
-            if (!$user->isAdmin()) {
-                $plan = $user->plan;
-                if (!$plan) {
-                    return back()->withErrors(['file' => 'You need an active plan to import candidates.']);
-                }
-                $used = $user->interviews()->count();
-                if ($used >= $plan->interview_limit) {
-                    return back()->withErrors(['file' => 'You have reached your plan limit for candidates. Please upgrade your plan.']);
-                }
+            $user->loadMissing('plan');
+
+            try {
+                $this->planQuota->assertCanCreateRecruitment($user, 1);
+            } catch (PlanQuotaExceededException $e) {
+                return back()->withErrors(['file' => $e->getMessage()]);
             }
 
             $count = 0;
             $skipped = 0;
+            $quotaSkipped = 0;
 
-            foreach ($rows as $index => $row) {
-                if (!$user->isAdmin() && ($used + $count) >= $plan->interview_limit) {
-                    $skipped += (count($rows) - $index);
-                    break;
-                }
-
+            foreach ($rows as $row) {
                 $data = array_change_key_case($row, CASE_LOWER);
 
                 if (empty(array_filter($data))) {
@@ -114,21 +113,31 @@ class InterviewController extends Controller
                     continue;
                 }
 
-                Interview::create([
-                    'candidate_name'  => $data['candidate_name'] ?? 'Unknown',
-                    'candidate_email' => $data['candidate_email'] ?? null,
-                    'applied_role'    => $data['applied_role'] ?? 'General',
-                    'job_description' => $data['job_description'] ?? null,
-                    'status'          => 'draft',
-                    'user_id'         => auth()->id() ?? 1,
-                ]);
+                try {
+                    $this->planQuota->withRecruitmentSlot($user, function () use ($user, $data, &$count) {
+                        Interview::create([
+                            'candidate_name' => $data['candidate_name'] ?? 'Unknown',
+                            'candidate_email' => $data['candidate_email'] ?? null,
+                            'applied_role' => $data['applied_role'] ?? 'General',
+                            'job_description' => $data['job_description'] ?? null,
+                            'status' => 'draft',
+                            'user_id' => $user->id,
+                        ]);
 
-                $count++;
+                        $count++;
+                    });
+                } catch (PlanQuotaExceededException $e) {
+                    $quotaSkipped++;
+                    break;
+                }
             }
 
             $message = "Imported {$count} candidates successfully!";
             if ($skipped > 0) {
                 $message .= " ({$skipped} empty rows skipped)";
+            }
+            if ($quotaSkipped > 0) {
+                $message .= " Monthly recruitment quota reached; remaining rows were not imported.";
             }
 
             return back()->with('success', $message);
@@ -222,6 +231,9 @@ Rules:
     {
         Gate::authorize('update', $interview);
 
+        // Existing candidates already counted at import; never block or revoke for later quota.
+        $this->planQuota->assertExistingRecordLinkAllowed($request->user());
+
         $request->validate([
             'questions' => 'required|array|min:1',
             'questions.*' => 'required|string',
@@ -245,6 +257,9 @@ Rules:
     public function regenerateLink(Interview $interview)
     {
         Gate::authorize('update', $interview);
+
+        // Regenerating a link must not consume quota or invalidate due to monthly limit.
+        $this->planQuota->assertExistingRecordLinkAllowed(auth()->user());
 
         $interview->update([
             'public_url' => Str::random(32),

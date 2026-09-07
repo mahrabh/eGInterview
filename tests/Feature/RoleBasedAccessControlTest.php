@@ -25,7 +25,7 @@ class RoleBasedAccessControlTest extends TestCase
 
         $this->actingAs($admin)
             ->get('/dashboard')
-            ->assertSee('System overview across recruitment and loan interviews.')
+            ->assertSee('Intelligent interviews for recruitment and loan assessment')
             ->assertSee('Candidates')
             ->assertSee('Loan Applicants');
     }
@@ -35,7 +35,7 @@ class RoleBasedAccessControlTest extends TestCase
         $recruiter = User::factory()->create(['role' => 'recruiter', 'name' => 'Recruiter One']);
 
         $this->actingAs($recruiter)->get('/dashboard')->assertOk()
-            ->assertSee('Your recruitment pipeline at a glance.')
+            ->assertSee('Run AI interviews, review candidates')
             ->assertSee('Recruitment')
             ->assertDontSee('Loan Applicants')
             ->assertSee('Recruiter');
@@ -51,7 +51,7 @@ class RoleBasedAccessControlTest extends TestCase
         $analyst = User::factory()->create(['role' => 'analyst', 'name' => 'Analyst One']);
 
         $this->actingAs($analyst)->get('/dashboard')->assertOk()
-            ->assertSee('Your loan applications and review queue.')
+            ->assertSee('AI loan interviews, assessments, and review queue')
             ->assertSee('Loan Applicants')
             ->assertDontSee('href="'.route('recruitment.index').'"', false)
             ->assertSee('Analyst')

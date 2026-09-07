@@ -12,6 +12,7 @@ class EnsureUserHasRole
      * Restrict access to one or more roles.
      *
      * Usage: middleware('role:admin,recruiter')
+     * Users with role "both" match recruiter and analyst route groups.
      *
      * @param  Closure(Request): (Response)  $next
      */
@@ -31,7 +32,11 @@ class EnsureUserHasRole
             ->values()
             ->all();
 
-        if ($allowed === [] || !in_array($user->role, $allowed, true)) {
+        $userRoles = method_exists($user, 'effectiveRoles')
+            ? $user->effectiveRoles()
+            : [(string) $user->role];
+
+        if ($allowed === [] || count(array_intersect($userRoles, $allowed)) === 0) {
             abort(403, 'Unauthorized action.');
         }
 

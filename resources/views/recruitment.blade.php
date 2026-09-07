@@ -32,8 +32,21 @@
 
             <div class="flex flex-wrap items-center gap-2">
                 @if(!auth()->user()->isAdmin() && auth()->user()->plan)
+                    @php
+                        $quota = auth()->user()->planUsageSnapshot();
+                    @endphp
                     <div class="px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 flex items-center gap-2">
-                        <span class="text-xs font-bold text-indigo-700 uppercase tracking-wide">{{ auth()->user()->plan->name }}: {{ auth()->user()->interviews()->count() }} / {{ auth()->user()->plan->interview_limit }} Used</span>
+                        <span class="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                            {{ auth()->user()->plan->name }} this month:
+                            {{ $quota['recruitment_used'] }}
+                            @if($quota['recruitment_limit'] !== null)
+                                / {{ $quota['recruitment_limit'] }}
+                            @endif
+                            used
+                            @if($quota['recruitment_remaining'] !== null)
+                                · {{ $quota['recruitment_remaining'] }} left
+                            @endif
+                        </span>
                     </div>
                 @endif
 

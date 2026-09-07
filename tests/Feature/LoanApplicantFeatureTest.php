@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 use App\Models\User;
+use App\Models\Plan;
 use App\Models\LoanApplicant;
 use App\Models\LoanApplication;
 
@@ -16,12 +17,24 @@ class LoanApplicantFeatureTest extends TestCase
 {
     use RefreshDatabase;
 
+    private Plan $loanPlan;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         Config::set('services.gemini.key', 'test-gemini-key');
         Config::set('services.gemini.extraction_model', 'gemini-3.7-flash');
+
+        $this->loanPlan = Plan::factory()->loanApplicants(1000)->create();
+    }
+
+    private function createAnalyst(array $attributes = []): User
+    {
+        return User::factory()->create(array_merge([
+            'role' => 'analyst',
+            'plan_id' => $this->loanPlan->id,
+        ], $attributes));
     }
 
     /** @return array{value: mixed, evidence: string, confidence: int} */
@@ -33,8 +46,8 @@ class LoanApplicantFeatureTest extends TestCase
     public function test_admin_can_view_all_applicants()
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $recruiter1 = User::factory()->create(['role' => 'analyst']);
-        $recruiter2 = User::factory()->create(['role' => 'analyst']);
+        $recruiter1 = $this->createAnalyst();
+        $recruiter2 = $this->createAnalyst();
 
         $applicant1 = LoanApplicant::create(['name' => 'John', 'phone' => '0171', 'application_reference' => 'ref1', 'created_by' => $recruiter1->id]);
         $applicant2 = LoanApplicant::create(['name' => 'Jane', 'phone' => '0172', 'application_reference' => 'ref2', 'created_by' => $recruiter2->id]);
@@ -50,8 +63,8 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_analyst_can_only_view_own_applicants()
     {
-        $recruiter1 = User::factory()->create(['role' => 'analyst']);
-        $recruiter2 = User::factory()->create(['role' => 'analyst']);
+        $recruiter1 = $this->createAnalyst();
+        $recruiter2 = $this->createAnalyst();
 
         $applicant1 = LoanApplicant::create(['name' => 'John', 'phone' => '0171', 'application_reference' => 'ref1', 'created_by' => $recruiter1->id]);
         $applicant2 = LoanApplicant::create(['name' => 'Jane', 'phone' => '0172', 'application_reference' => 'ref2', 'created_by' => $recruiter2->id]);
@@ -68,8 +81,8 @@ class LoanApplicantFeatureTest extends TestCase
     public function test_admin_can_filter_applicants_by_created_user()
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $recruiter1 = User::factory()->create(['role' => 'analyst', 'name' => 'Recruiter One']);
-        $recruiter2 = User::factory()->create(['role' => 'analyst', 'name' => 'Recruiter Two']);
+        $recruiter1 = $this->createAnalyst(['name' => 'Recruiter One']);
+        $recruiter2 = $this->createAnalyst(['name' => 'Recruiter Two']);
 
         $applicant1 = LoanApplicant::create(['name' => 'John', 'phone' => '0171', 'application_reference' => 'ref1', 'created_by' => $recruiter1->id]);
         $applicant2 = LoanApplicant::create(['name' => 'Jane', 'phone' => '0172', 'application_reference' => 'ref2', 'created_by' => $recruiter2->id]);
@@ -85,14 +98,14 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_import_requires_file()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
         $response = $this->actingAs($user)->post('/loan-applications/import', []);
         $response->assertSessionHasErrors('csv_file');
     }
 
     public function test_import_processes_valid_csv_and_ignores_duplicates()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
         
         $csvContent = "applicant_name,phone_number\n";
         $csvContent .= "Test User,01999999999\n";
@@ -119,7 +132,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_reimporting_existing_phone_explains_duplicate_clearly()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
 
         LoanApplicant::create([
             'name' => 'John Doe',
@@ -147,7 +160,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_import_restores_leading_zero_when_excel_strips_it()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
 
         $csvContent = "applicant_name,phone_number\n";
         $csvContent .= "Excel User,1712345678\n";
@@ -167,7 +180,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_import_accepts_common_bangladesh_phone_formats()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
 
         $csvContent = "applicant_name,phone_number\n";
         $csvContent .= "Local Zero,01911112222\n";
@@ -197,7 +210,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_downloaded_template_can_be_imported(): void
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
 
         $tempPath = storage_path('app/testing_loan_template_import.xlsx');
         $writer = \Spatie\SimpleExcel\SimpleExcelWriter::create($tempPath);
@@ -245,8 +258,8 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_import_allows_same_phone_for_different_analysts()
     {
-        $recruiterA = User::factory()->create(['role' => 'analyst']);
-        $recruiterB = User::factory()->create(['role' => 'analyst']);
+        $recruiterA = $this->createAnalyst();
+        $recruiterB = $this->createAnalyst();
 
         LoanApplicant::create([
             'name' => 'Existing Applicant',
@@ -274,7 +287,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_phone_is_stored_masked_for_display()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
 
         $applicant = LoanApplicant::create([
             'name' => 'Masked User',
@@ -292,7 +305,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_import_blocks_duplicate_phone_for_same_analyst()
     {
-        $recruiter = User::factory()->create(['role' => 'analyst']);
+        $recruiter = $this->createAnalyst();
 
         LoanApplicant::create([
             'name' => 'Existing Applicant',
@@ -316,7 +329,7 @@ class LoanApplicantFeatureTest extends TestCase
     
     public function test_can_delete_own_applicant()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
         $applicant = LoanApplicant::create(['name' => 'John', 'phone' => '0171', 'application_reference' => 'ref1', 'created_by' => $user->id]);
         
         $application = LoanApplication::create([
@@ -334,8 +347,8 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_cannot_delete_other_applicant()
     {
-        $user1 = User::factory()->create(['role' => 'analyst']);
-        $user2 = User::factory()->create(['role' => 'analyst']);
+        $user1 = $this->createAnalyst();
+        $user2 = $this->createAnalyst();
         $applicant = LoanApplicant::create(['name' => 'John', 'phone' => '0171', 'application_reference' => 'ref1', 'created_by' => $user1->id]);
         
         $application = LoanApplication::create([
@@ -353,7 +366,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_loan_interview_flow()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
         $applicant = LoanApplicant::create(['name' => 'John', 'phone' => '01712345678', 'application_reference' => 'LA-12345', 'created_by' => $user->id]);
         
         $application = LoanApplication::create([
@@ -425,7 +438,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_incomplete_session_saves_as_needs_review()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
         $applicant = LoanApplicant::create(['name' => 'Jane', 'phone' => '01812345678', 'application_reference' => 'LA-12346', 'created_by' => $user->id]);
         
         $application = LoanApplication::create([
@@ -476,7 +489,7 @@ class LoanApplicantFeatureTest extends TestCase
 
     public function test_unclear_amount_saves_as_needs_confirmation()
     {
-        $user = User::factory()->create(['role' => 'analyst']);
+        $user = $this->createAnalyst();
         $applicant = LoanApplicant::create(['name' => 'Alice', 'phone' => '01912345678', 'application_reference' => 'LA-12347', 'created_by' => $user->id]);
         
         $application = LoanApplication::create([

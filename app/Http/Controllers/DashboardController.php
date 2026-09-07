@@ -121,7 +121,12 @@ class DashboardController extends Controller
         $needsAttention = $pendingApproval + $expiredLinks + $loanNeedsReview + $loanProcessing;
 
         return view('dashboard', [
-            'dashboardMode' => $user->isAdmin() ? 'admin' : ($user->isAnalyst() ? 'analyst' : 'recruiter'),
+            'dashboardMode' => match (true) {
+                $user->isAdmin() => 'admin',
+                $user->isBoth() => 'both',
+                $user->isAnalyst() => 'analyst',
+                default => 'recruiter',
+            },
             'showRecruitment' => $showRecruitment,
             'showLoans' => $showLoans,
             'totalCandidates' => $totalCandidates,

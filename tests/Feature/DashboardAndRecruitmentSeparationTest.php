@@ -20,7 +20,7 @@ class DashboardAndRecruitmentSeparationTest extends TestCase
         $response = $this->actingAs($admin)->get('/dashboard');
 
         $response->assertOk();
-        $response->assertSee('System overview across recruitment and loan interviews.');
+        $response->assertSee('Intelligent interviews for recruitment and loan assessment');
         $response->assertSee('Candidates');
         $response->assertSee('Loan Applicants');
         $response->assertDontSee('Import CSV');

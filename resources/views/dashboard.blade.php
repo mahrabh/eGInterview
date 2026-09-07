@@ -4,11 +4,13 @@
         $subtitle = match ($mode) {
             'recruiter' => 'Run AI interviews, review candidates, and keep your hiring pipeline moving.',
             'analyst' => 'AI loan interviews, assessments, and review queue — ready for action.',
+            'both' => 'Run recruitment interviews and loan assessments from one workspace.',
             default => 'Intelligent interviews for recruitment and loan assessment — live, scored, and ready to review.',
         };
         $heroEyebrow = match ($mode) {
             'recruiter' => 'Recruitment intelligence',
             'analyst' => 'Loan assessment intelligence',
+            'both' => 'Combined interview workspace',
             default => 'AI interview workspace',
         };
     @endphp

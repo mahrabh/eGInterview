@@ -14,7 +14,7 @@ class InterviewPolicy
 
     public function view(User $user, Interview $interview): bool
     {
-        return $user->isAdmin() || ($user->isRecruiter() && $user->id === $interview->user_id);
+        return $user->isAdmin() || ($user->canAccessRecruitment() && $user->id === $interview->user_id);
     }
 
     public function create(User $user): bool
@@ -24,11 +24,11 @@ class InterviewPolicy
 
     public function update(User $user, Interview $interview): bool
     {
-        return $user->isAdmin() || ($user->isRecruiter() && $user->id === $interview->user_id);
+        return $user->isAdmin() || ($user->canAccessRecruitment() && $user->id === $interview->user_id);
     }
 
     public function delete(User $user, Interview $interview): bool
     {
-        return $user->isAdmin() || ($user->isRecruiter() && $user->id === $interview->user_id);
+        return $user->isAdmin() || ($user->canAccessRecruitment() && $user->id === $interview->user_id);
     }
 }

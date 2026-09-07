@@ -31,7 +31,7 @@
                         </div>
                     </div>
                     <div class="mt-3">
-                        <span class="inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-full {{ Auth::user()->isAdmin() ? 'bg-indigo-400/20 text-indigo-100 border border-indigo-300/30' : (Auth::user()->isAnalyst() ? 'bg-cyan-400/20 text-cyan-100 border border-cyan-300/30' : 'bg-violet-400/20 text-violet-100 border border-violet-300/30') }}">
+                        <span class="inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-full {{ Auth::user()->isAdmin() ? 'bg-indigo-400/20 text-indigo-100 border border-indigo-300/30' : (Auth::user()->isBoth() ? 'bg-indigo-400/20 text-indigo-100 border border-indigo-300/30' : (Auth::user()->isAnalyst() ? 'bg-cyan-400/20 text-cyan-100 border border-cyan-300/30' : 'bg-violet-400/20 text-violet-100 border border-violet-300/30')) }}">
                             {{ Auth::user()->roleLabel() }}
                         </span>
                     </div>
@@ -40,19 +40,64 @@
                 <div class="p-5">
                     @if(!Auth::user()->isAdmin() && Auth::user()->plan)
                         @php
-                            $used = Auth::user()->interviews()->count();
-                            $limit = max(1, Auth::user()->plan->interview_limit);
-                            $percent = min(100, ($used / $limit) * 100);
+                            $user = Auth::user();
+                            $quota = $user->planUsageSnapshot();
+                            $showRecruitmentUsage = $user->canAccessRecruitment() && $user->plan->coversRecruitment();
+                            $showLoanUsage = $user->canAccessLoans() && $user->plan->coversLoans();
+                            $rUsed = (int) $quota['recruitment_used'];
+                            $rLimit = $quota['recruitment_limit'];
+                            $lUsed = (int) $quota['loan_used'];
+                            $lLimit = $quota['loan_limit'];
+                            $rPercent = ($rLimit !== null && $rLimit > 0) ? min(100, ($rUsed / $rLimit) * 100) : 0;
+                            $lPercent = ($lLimit !== null && $lLimit > 0) ? min(100, ($lUsed / $lLimit) * 100) : 0;
                         @endphp
-                        <div class="mb-4 p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-sm font-medium text-slate-700">Plan: {{ Auth::user()->plan->name }}</span>
-                                <span class="text-sm font-semibold text-indigo-600">{{ $used }} / {{ Auth::user()->plan->interview_limit }}</span>
+                        <div class="mb-4 p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm font-medium text-slate-700">Plan: {{ $user->plan->name }}</span>
+                                <span class="text-[10px] font-bold uppercase tracking-wide text-indigo-600">{{ $user->plan->moduleLabel() }}</span>
                             </div>
-                            <div class="w-full bg-indigo-100 rounded-full h-2">
-                                <div class="bg-indigo-500 h-2 rounded-full transition-all" style="width: {{ $percent }}%"></div>
-                            </div>
-                            <p class="text-xs text-slate-500 mt-2">Interview usage</p>
+
+                            @if($showRecruitmentUsage && $showLoanUsage)
+                                <div class="space-y-2.5">
+                                    <div>
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-xs font-semibold text-slate-600">Recruitment (R)</span>
+                                            <span class="text-xs font-bold text-indigo-700 tabular-nums">{{ $rUsed }} / {{ $rLimit ?? '∞' }}</span>
+                                        </div>
+                                        <div class="w-full bg-indigo-100 rounded-full h-1.5">
+                                            <div class="bg-indigo-500 h-1.5 rounded-full transition-all" style="width: {{ $rPercent }}%"></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-xs font-semibold text-slate-600">Loans (L)</span>
+                                            <span class="text-xs font-bold text-sky-700 tabular-nums">{{ $lUsed }} / {{ $lLimit ?? '∞' }}</span>
+                                        </div>
+                                        <div class="w-full bg-sky-100 rounded-full h-1.5">
+                                            <div class="bg-sky-500 h-1.5 rounded-full transition-all" style="width: {{ $lPercent }}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-[11px] text-slate-500">Monthly usage · resets each calendar month</p>
+                            @elseif($showRecruitmentUsage)
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-xs font-semibold text-slate-600">Recruitment</span>
+                                    <span class="text-sm font-semibold text-indigo-600 tabular-nums">{{ $rUsed }} / {{ $rLimit ?? '∞' }}</span>
+                                </div>
+                                <div class="w-full bg-indigo-100 rounded-full h-2">
+                                    <div class="bg-indigo-500 h-2 rounded-full transition-all" style="width: {{ $rPercent }}%"></div>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-2">Monthly recruitment usage</p>
+                            @elseif($showLoanUsage)
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-xs font-semibold text-slate-600">Loans</span>
+                                    <span class="text-sm font-semibold text-sky-600 tabular-nums">{{ $lUsed }} / {{ $lLimit ?? '∞' }}</span>
+                                </div>
+                                <div class="w-full bg-sky-100 rounded-full h-2">
+                                    <div class="bg-sky-500 h-2 rounded-full transition-all" style="width: {{ $lPercent }}%"></div>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-2">Monthly loan usage</p>
+                            @endif
                         </div>
                     @endif
 
@@ -62,10 +107,25 @@
                             <span class="font-semibold text-slate-800">{{ Auth::user()->created_at->format('M d, Y') }}</span>
                         </div>
                         <div class="flex items-center justify-between gap-3 text-sm">
+                            <span class="text-slate-500">Access expires</span>
+                            <span class="font-semibold {{ Auth::user()->isExpired() ? 'text-rose-700' : 'text-slate-800' }}">
+                                {{ Auth::user()->expiryLabel() }}
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between gap-3 text-sm">
                             <span class="text-slate-500">Status</span>
-                            <span class="inline-flex items-center gap-1.5 font-semibold text-emerald-700">
-                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                Active
+                            @php
+                                $accountStatus = Auth::user()->accountStatusLabel();
+                                $statusTone = $accountStatus === 'Expired'
+                                    ? 'text-rose-700'
+                                    : ($accountStatus === 'Plan inactive' ? 'text-amber-700' : 'text-emerald-700');
+                                $dotTone = $accountStatus === 'Expired'
+                                    ? 'bg-rose-500'
+                                    : ($accountStatus === 'Plan inactive' ? 'bg-amber-500' : 'bg-emerald-500');
+                            @endphp
+                            <span class="inline-flex items-center gap-1.5 font-semibold {{ $statusTone }}">
+                                <span class="w-2 h-2 rounded-full {{ $dotTone }}"></span>
+                                {{ $accountStatus }}
                             </span>
                         </div>
                     </div>
