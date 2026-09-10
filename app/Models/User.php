@@ -69,6 +69,11 @@ class User extends Authenticatable
         return $this->hasMany(LoanApplicant::class, 'created_by');
     }
 
+    public function billingHistories(): HasMany
+    {
+        return $this->hasMany(BillingHistory::class);
+    }
+
     public function plan(): BelongsTo
     {
         return $this->belongsTo(Plan::class);

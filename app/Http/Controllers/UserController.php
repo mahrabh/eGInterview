@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Plan;
 use App\Models\User;
+use App\Services\BillingService;
 use App\Services\PlanQuotaService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -11,8 +12,10 @@ use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
-    public function __construct(private PlanQuotaService $planQuota)
-    {
+    public function __construct(
+        private PlanQuotaService $planQuota,
+        private BillingService $billing,
+    ) {
     }
 
     public function index()
@@ -67,7 +70,7 @@ class UserController extends Controller
         $planId = $validated['plan_id'] ?? null;
         $this->planQuota->validateAssignablePlan($planId ? (int) $planId : null, $role);
 
-        User::create([
+        $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => $validated['password'],
@@ -75,6 +78,15 @@ class UserController extends Controller
             'plan_id' => $planId,
             'expires_at' => $this->normalizeExpiresAt($validated['expires_at'] ?? null),
         ]);
+
+        if ($planId) {
+            $this->billing->recordPlanAssignment(
+                $user->fresh(['plan']),
+                $user->plan,
+                'Plan assigned on account creation',
+                $request->user(),
+            );
+        }
 
         return redirect()->route('users.index')->with('success', 'User account created successfully.');
     }
@@ -151,12 +163,28 @@ class UserController extends Controller
         }
 
         $user->fill($payload);
+        $planChanged = $user->isDirty('plan_id');
+        $previousPlanId = $user->getOriginal('plan_id');
 
         if (! $user->isDirty()) {
             return back()->with('info', 'No changes to save.');
         }
 
         $user->save();
+
+        if ($planChanged && $user->plan_id) {
+            $user->load('plan');
+            $description = $previousPlanId
+                ? 'Plan updated by administrator'
+                : 'Plan assigned by administrator';
+
+            $this->billing->recordPlanAssignment(
+                $user,
+                $user->plan,
+                $description,
+                $request->user(),
+            );
+        }
 
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }
@@ -172,7 +200,18 @@ class UserController extends Controller
         $planId = $request->filled('plan_id') ? (int) $request->plan_id : null;
         $this->planQuota->validateAssignablePlan($planId, $user->role);
 
+        $previousPlanId = $user->plan_id;
         $user->update(['plan_id' => $planId]);
+
+        if ($planId && (int) $previousPlanId !== (int) $planId) {
+            $user->load('plan');
+            $this->billing->recordPlanAssignment(
+                $user,
+                $user->plan,
+                $previousPlanId ? 'Plan reassigned by administrator' : 'Plan assigned by administrator',
+                $request->user(),
+            );
+        }
 
         return redirect()->route('users.index')->with('success', "Plan assigned to {$user->name} successfully.");
     }

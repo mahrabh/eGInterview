@@ -23,15 +23,30 @@ class InterviewController extends Controller
     {
         Gate::authorize('viewAny', Interview::class);
 
-        $query = Interview::with('user')
+        $query = Interview::query()
+            ->select([
+                'id',
+                'candidate_name',
+                'candidate_email',
+                'applied_role',
+                'status',
+                'user_id',
+                'public_url',
+                'link_expires_at',
+                'evaluation_json',
+                'created_at',
+                'updated_at',
+            ])
+            ->selectRaw('CASE WHEN candidate_photo IS NOT NULL AND candidate_photo <> \'\' THEN 1 ELSE 0 END as has_candidate_photo')
+            ->with('user:id,name')
             ->orderByRaw("CASE status WHEN 'draft' THEN 1 WHEN 'pending' THEN 2 WHEN 'approved' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END ASC")
             ->latest('updated_at');
-        
+
         $users = [];
         if (!auth()->user()->isAdmin()) {
             $query->where('user_id', auth()->id());
         } else {
-            $users = User::whereIn('role', ['admin', 'recruiter', 'both'])->orderBy('name')->get();
+            $users = User::whereIn('role', ['admin', 'recruiter', 'both'])->orderBy('name')->get(['id', 'name']);
             if ($request->filled('user_id')) {
                 $query->where('user_id', $request->user_id);
             }
@@ -51,6 +66,36 @@ class InterviewController extends Controller
 
         $interviews = $query->paginate(15)->appends($request->query());
         return view('recruitment', compact('interviews', 'users'));
+    }
+
+    public function photo(Interview $interview)
+    {
+        Gate::authorize('view', $interview);
+
+        $photo = $interview->candidate_photo;
+        if (!$photo) {
+            abort(404);
+        }
+
+        if (preg_match('#^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$#s', $photo, $matches)) {
+            return response(base64_decode($matches[2], true) ?: '')
+                ->header('Content-Type', $matches[1])
+                ->header('Cache-Control', 'private, max-age=3600');
+        }
+
+        return response($photo)
+            ->header('Content-Type', 'image/jpeg')
+            ->header('Cache-Control', 'private, max-age=3600');
+    }
+
+    public function details(Interview $interview)
+    {
+        Gate::authorize('view', $interview);
+
+        return response()->json([
+            'transcript' => $interview->transcript_text ?? '',
+            'evaluation' => $interview->evaluation_json,
+        ]);
     }
 
     public function import(Request $request)

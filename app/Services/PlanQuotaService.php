@@ -175,8 +175,10 @@ class PlanQuotaService
 
         $remaining = $this->remainingLoan($user);
         if ($remaining !== null && $remaining < $quantity) {
+            $limit = $plan->effectiveLoanLimit();
+            $used = $this->monthlyLoanUsage($user);
             throw new PlanQuotaExceededException(
-                'You have reached your monthly Loan interview quota. Please upgrade your plan or wait until next month.',
+                "Monthly Loan Applicants limit reached ({$used} / {$limit}). You cannot import more until next month, or ask an admin to upgrade your plan.",
                 'loan'
             );
         }
@@ -294,13 +296,20 @@ class PlanQuotaService
      */
     public function usageSnapshot(User $user): array
     {
+        $recruitmentUsed = array_key_exists('recruitment_month_count', $user->getAttributes())
+            ? (int) $user->recruitment_month_count
+            : $this->monthlyRecruitmentUsage($user);
+        $loanUsed = array_key_exists('loan_month_count', $user->getAttributes())
+            ? (int) $user->loan_month_count
+            : $this->monthlyLoanUsage($user);
+
         if ($user->isAdmin()) {
             return [
                 'module' => 'All modules',
-                'recruitment_used' => $this->monthlyRecruitmentUsage($user),
+                'recruitment_used' => $recruitmentUsed,
                 'recruitment_limit' => null,
                 'recruitment_remaining' => null,
-                'loan_used' => $this->monthlyLoanUsage($user),
+                'loan_used' => $loanUsed,
                 'loan_limit' => null,
                 'loan_remaining' => null,
                 'account_status' => 'Unrestricted',
@@ -318,14 +327,17 @@ class PlanQuotaService
             $status = 'Active';
         }
 
+        $recruitmentLimit = $this->recruitmentLimit($user);
+        $loanLimit = $this->loanLimit($user);
+
         return [
             'module' => $moduleLabel,
-            'recruitment_used' => $this->monthlyRecruitmentUsage($user),
-            'recruitment_limit' => $this->recruitmentLimit($user),
-            'recruitment_remaining' => $this->remainingRecruitment($user),
-            'loan_used' => $this->monthlyLoanUsage($user),
-            'loan_limit' => $this->loanLimit($user),
-            'loan_remaining' => $this->remainingLoan($user),
+            'recruitment_used' => $recruitmentUsed,
+            'recruitment_limit' => $recruitmentLimit,
+            'recruitment_remaining' => $recruitmentLimit === null ? null : max(0, $recruitmentLimit - $recruitmentUsed),
+            'loan_used' => $loanUsed,
+            'loan_limit' => $loanLimit,
+            'loan_remaining' => $loanLimit === null ? null : max(0, $loanLimit - $loanUsed),
             'account_status' => $status,
         ];
     }

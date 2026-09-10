@@ -23,7 +23,21 @@ class LoanApplicationController extends Controller
     {
         Gate::authorize('viewAny', LoanApplication::class);
 
-        $query = LoanApplication::with(['applicant']);
+        $query = LoanApplication::query()
+            ->select([
+                'id',
+                'loan_applicant_id',
+                'loan_type',
+                'status',
+                'outcome',
+                'submitted_at',
+                'public_token_hash',
+                'public_token_expiry',
+                'created_at',
+                'updated_at',
+            ])
+            ->selectRaw('CASE WHEN extracted_data IS NOT NULL THEN 1 ELSE 0 END as has_extracted_data')
+            ->with(['applicant:id,name,application_reference,phone_masked,created_by']);
         $users = [];
 
         if (!$request->user()->isAdmin()) {
@@ -31,7 +45,7 @@ class LoanApplicationController extends Controller
                 $q->where('created_by', $request->user()->id);
             });
         } else {
-            $users = User::whereIn('role', ['admin', 'analyst', 'both'])->orderBy('name')->get();
+            $users = User::whereIn('role', ['admin', 'analyst', 'both'])->orderBy('name')->get(['id', 'name']);
 
             if ($request->filled('user_id')) {
                 $query->whereHas('applicant', function ($q) use ($request) {
@@ -206,7 +220,14 @@ class LoanApplicationController extends Controller
         }
 
         if ($successCount === 0 && $quotaSkipped > 0) {
-            return back()->with('error', 'You have reached your monthly Loan interview quota. Please upgrade your plan or wait until next month.');
+            $limit = $user->plan?->effectiveLoanLimit();
+            $used = $this->planQuota->monthlyLoanUsage($user);
+            $limitText = $limit !== null ? " ({$used} / {$limit})" : '';
+
+            return back()->with(
+                'error',
+                "Monthly Loan Applicants limit reached{$limitText}. You cannot import more until next month, or ask an admin to upgrade your plan."
+            );
         }
 
         if ($successCount === 0 && $duplicateCount > 0 && $invalidCount === 0) {
@@ -228,7 +249,7 @@ class LoanApplicationController extends Controller
             $message .= ' Skipped (' . implode(', ', $parts) . ').';
         }
         if ($quotaSkipped > 0) {
-            $message .= ' Monthly loan quota reached; remaining rows were not imported.';
+            $message .= ' Monthly Loan Applicants limit reached; remaining rows were not imported.';
         }
 
         return back()->with('success', $message);
@@ -349,7 +370,11 @@ class LoanApplicationController extends Controller
             });
         }
 
-        $applications = $query->get(['id', 'status', 'outcome', 'submitted_at', 'extracted_data', 'calculation_data']);
+        $applications = $query
+            ->select(['id', 'status', 'outcome', 'submitted_at'])
+            ->selectRaw('CASE WHEN extracted_data IS NOT NULL THEN 1 ELSE 0 END as has_extracted_data_flag')
+            ->selectRaw('CASE WHEN calculation_data IS NOT NULL THEN 1 ELSE 0 END as has_calculation_data_flag')
+            ->get();
 
         $snapshot = [];
         foreach ($applications as $application) {
@@ -361,11 +386,20 @@ class LoanApplicationController extends Controller
 
     private function applicationStatusPayload(LoanApplication $application): array
     {
-        $hasExtractedData = is_array($application->extracted_data);
-        $hasCalculationData = is_array($application->calculation_data)
-            && (
-                isset($application->calculation_data['eligible_amount'])
-                || isset($application->calculation_data['assessment_status'])
+        $attributes = $application->getAttributes();
+
+        $hasExtractedData = array_key_exists('has_extracted_data_flag', $attributes)
+            ? (bool) $application->has_extracted_data_flag
+            : is_array($application->extracted_data);
+
+        $hasCalculationData = array_key_exists('has_calculation_data_flag', $attributes)
+            ? (bool) $application->has_calculation_data_flag
+            : (
+                is_array($application->calculation_data)
+                && (
+                    isset($application->calculation_data['eligible_amount'])
+                    || isset($application->calculation_data['assessment_status'])
+                )
             );
 
         $isReportReady = $hasExtractedData && in_array($application->status, ['assessed', 'needs_review'], true);

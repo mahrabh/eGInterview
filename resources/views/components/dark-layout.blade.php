@@ -4,20 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $title ?? 'eGInterview AI' }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                }
-            }
-        }
-    </script>
+    <title>{{ $title ?? 'egMeet AI' }}</title>
+    <link rel="icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
+    <link rel="shortcut icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    @vite(['resources/css/app.css'])
     <style>
         body { font-family: 'Inter', sans-serif; }
         .app-shell-bg {
@@ -312,10 +305,10 @@
                 <div class="flex items-center gap-3 min-w-0">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-3 group min-w-0">
                         <div class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center border border-white/20 group-hover:scale-105 transition-transform bg-gradient-to-br from-indigo-500 to-blue-600 overflow-hidden shadow-lg shadow-indigo-500/20">
-                            <span class="text-white font-black text-base">eG</span>
+                            <span class="text-white font-black text-base">eg</span>
                         </div>
                         <div class="min-w-0">
-                            <h1 class="text-lg sm:text-xl font-black text-white tracking-tight group-hover:text-indigo-200 transition-colors truncate leading-tight">eGInterview AI</h1>
+                            <h1 class="text-lg sm:text-xl font-black text-white tracking-tight group-hover:text-indigo-200 transition-colors truncate leading-tight">egMeet AI</h1>
                             <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hidden sm:block">AI Interview Platform</p>
                         </div>
                     </a>
@@ -350,6 +343,10 @@
                             Plans
                         </a>
                         @endif
+                        <a href="{{ route('billing.index') }}" class="ai-nav-link {{ request()->routeIs('billing.*') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"></path></svg>
+                            Billing
+                        </a>
                     </div>
 
                     <div class="flex items-center gap-3 pl-6 border-l border-white/15">
@@ -412,6 +409,10 @@
                         Plans
                     </a>
                     @endif
+                    <a href="{{ route('billing.index') }}" class="ai-nav-link {{ request()->routeIs('billing.*') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"></path></svg>
+                        Billing
+                    </a>
                 </div>
 
                 <div class="mt-3 pt-3 border-t border-white/10 flex items-center justify-between gap-3">

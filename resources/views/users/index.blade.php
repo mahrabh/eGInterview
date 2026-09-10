@@ -44,8 +44,8 @@
                     @foreach($users as $user)
                         @php
                             $snapshot = $user->planUsageSnapshot();
-                            $recruitUsed = (int) ($user->recruitment_month_count ?? $snapshot['recruitment_used']);
-                            $loanUsed = (int) ($user->loan_month_count ?? $snapshot['loan_used']);
+                            $recruitUsed = (int) $snapshot['recruitment_used'];
+                            $loanUsed = (int) $snapshot['loan_used'];
                         @endphp
                     <tr class="hover:bg-slate-50 transition-colors group">
                         <td class="px-5 sm:px-6 py-4">
@@ -119,7 +119,7 @@
                         </td>
                         <td class="px-5 sm:px-6 py-4">
                             @php
-                                $status = $user->accountStatusLabel();
+                                $status = $user->isExpired() ? 'Expired' : $snapshot['account_status'];
                                 $statusClass = match ($status) {
                                     'Unrestricted', 'Active' => 'bg-emerald-50 text-emerald-700 border-emerald-200',
                                     'Plan inactive' => 'bg-amber-50 text-amber-700 border-amber-200',

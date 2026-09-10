@@ -3,33 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | eGInterview AI</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                }
-            }
-        }
-    </script>
+    <title>Login | egMeet AI</title>
+    <link rel="icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
+    <link rel="shortcut icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    @vite(['resources/css/app.css'])
     <style>
         body { font-family: 'Inter', sans-serif; }
 
         .login-wallpaper {
             background-color: #020617;
-            background-image: url("{{ asset('images/login-ai-wallpaper.webp') }}");
-            background-size: cover;
-            background-position: center center;
-            background-repeat: no-repeat;
+            background-image:
+                radial-gradient(ellipse 90% 60% at 15% -10%, rgba(99, 102, 241, 0.28), transparent 55%),
+                radial-gradient(ellipse 70% 50% at 95% 10%, rgba(37, 99, 235, 0.22), transparent 50%),
+                radial-gradient(ellipse 50% 40% at 50% 100%, rgba(56, 189, 248, 0.10), transparent 55%);
         }
 
         .login-overlay {
             background:
-                linear-gradient(180deg, rgba(2, 6, 23, 0.55) 0%, rgba(2, 6, 23, 0.72) 45%, rgba(2, 6, 23, 0.82) 100%),
-                radial-gradient(ellipse 70% 55% at 50% 40%, rgba(2, 6, 23, 0.25), rgba(2, 6, 23, 0.65) 75%);
+                linear-gradient(180deg, rgba(2, 6, 23, 0.15) 0%, rgba(2, 6, 23, 0.45) 55%, rgba(2, 6, 23, 0.65) 100%);
         }
 
         .glass-card {
@@ -112,11 +106,11 @@
                     <div class="relative">
                         <div class="logo-glow absolute inset-0 rounded-xl bg-indigo-500/50 blur-md"></div>
                         <div class="relative w-11 h-11 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center border border-white/15">
-                            <span class="text-white font-black text-lg">eG</span>
+                            <span class="text-white font-black text-lg">eg</span>
                         </div>
                     </div>
                     <div class="text-left">
-                        <h1 class="text-xl font-black text-white tracking-tight leading-tight">eGInterview AI</h1>
+                        <h1 class="text-xl font-black text-white tracking-tight leading-tight">egMeet AI</h1>
                         <div class="flex items-center gap-2 mt-0.5">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">AI Interview</p>
                             <div class="eq" aria-hidden="true">

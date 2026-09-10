@@ -7,10 +7,8 @@
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <script src="https://cdn.tailwindcss.com"></script>
-
     @viteReactRefresh
-    @vite('resources/js/live-interview.tsx')
+    @vite(['resources/css/app.css', 'resources/js/live-interview.tsx'])
 </head>
 <body class="bg-slate-950 min-h-screen text-slate-100 font-sans">
     <div

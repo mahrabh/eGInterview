@@ -34,7 +34,35 @@
                 <button type="submit" class="hidden"></button>
             </form>
 
+            @php
+                $authUser = auth()->user();
+                $loanQuota = (! $authUser->isAdmin() && $authUser->plan) ? $authUser->planUsageSnapshot() : null;
+                $loanRemaining = $loanQuota['loan_remaining'] ?? null;
+                $loanAtLimit = $loanQuota !== null
+                    && $authUser->plan?->coversLoans()
+                    && $loanRemaining !== null
+                    && $loanRemaining <= 0;
+                $loanNoAccess = $loanQuota !== null && ! $authUser->plan?->coversLoans();
+                $loanImportBlocked = $loanAtLimit || $loanNoAccess || ($loanQuota !== null && ($loanQuota['account_status'] ?? null) === 'Plan inactive');
+            @endphp
+
             <div class="flex flex-wrap items-center gap-2">
+                @if($loanQuota && $authUser->plan?->coversLoans())
+                    <div class="px-3.5 py-2 rounded-xl border {{ $loanAtLimit ? 'border-amber-200 bg-amber-50' : 'border-sky-200 bg-sky-50' }} flex items-center gap-2">
+                        <span class="text-xs font-bold {{ $loanAtLimit ? 'text-amber-800' : 'text-sky-700' }} uppercase tracking-wide">
+                            {{ $authUser->plan->name }} this month:
+                            {{ $loanQuota['loan_used'] }}
+                            @if($loanQuota['loan_limit'] !== null)
+                                / {{ $loanQuota['loan_limit'] }}
+                            @endif
+                            used
+                            @if($loanRemaining !== null)
+                                · {{ $loanRemaining }} left
+                            @endif
+                        </span>
+                    </div>
+                @endif
+
                 <div class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span class="text-xs font-bold text-slate-600 uppercase tracking-wide">{{ $applications->total() }} Records</span>
@@ -45,17 +73,46 @@
                     Download Template
                 </a>
 
-                <form action="{{ route('loan-applications.import') }}" method="POST" enctype="multipart/form-data" class="inline-flex">
-                    @csrf
-                    <label class="cursor-pointer border border-indigo-200 hover:border-indigo-300 bg-indigo-50 hover:bg-indigo-100 px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors">
-                        <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                        <span class="text-sm font-semibold text-indigo-700">Import XLSX/CSV</span>
-                        <input type="file" name="csv_file" accept=".csv,.xlsx" required class="hidden" onchange="this.form.submit()">
-                    </label>
-                </form>
+                @if($loanImportBlocked)
+                    <div class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed" title="Import unavailable — monthly loan limit reached or plan inactive">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <span class="text-sm font-semibold">Import XLSX/CSV</span>
+                    </div>
+                @else
+                    <form action="{{ route('loan-applications.import') }}" method="POST" enctype="multipart/form-data" class="inline-flex">
+                        @csrf
+                        <label class="cursor-pointer border border-indigo-200 hover:border-indigo-300 bg-indigo-50 hover:bg-indigo-100 px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors">
+                            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            <span class="text-sm font-semibold text-indigo-700">Import XLSX/CSV</span>
+                            <input type="file" name="csv_file" accept=".csv,.xlsx" required class="hidden" onchange="this.form.submit()">
+                        </label>
+                    </form>
+                @endif
             </div>
         </div>
     </div>
+
+    @if($loanAtLimit)
+        <div class="mb-6 bg-amber-50 text-amber-900 px-5 py-3.5 rounded-xl border border-amber-200 text-sm font-semibold flex items-start gap-3">
+            <svg class="w-5 h-5 shrink-0 mt-0.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+            <div>
+                <p>Monthly Loan Applicants limit reached
+                    @if($loanQuota['loan_limit'] !== null)
+                        ({{ $loanQuota['loan_used'] }} / {{ $loanQuota['loan_limit'] }})
+                    @endif.
+                </p>
+                <p class="text-[12px] font-medium text-amber-800/80 mt-0.5">You cannot import more applicants until you  ask an admin to upgrade your plan.</p>
+            </div>
+        </div>
+    @elseif($loanNoAccess)
+        <div class="mb-6 bg-amber-50 text-amber-900 px-5 py-3.5 rounded-xl border border-amber-200 text-sm font-semibold flex items-start gap-3">
+            <svg class="w-5 h-5 shrink-0 mt-0.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+            <div>
+                <p>Your plan does not include Loan Applicants.</p>
+                <p class="text-[12px] font-medium text-amber-800/80 mt-0.5">Ask an admin to assign a Loan Applicants or Combined plan.</p>
+            </div>
+        </div>
+    @endif
 
     @if(session('success'))
     <div id="flash-success" class="flash-message bg-emerald-50 text-emerald-700 px-5 py-3.5 rounded-xl border border-emerald-200 font-semibold text-sm flex items-center gap-3 mb-6">
@@ -110,7 +167,7 @@
                         };
                         $canViewReport = $item->submitted_at !== null
                             || in_array($item->status, ['pending', 'needs_review', 'assessed', 'processing'], true)
-                            || is_array($item->extracted_data);
+                            || (bool) $item->has_extracted_data;
                     @endphp
                     <tr class="hover:bg-slate-50 transition-colors group">
                         <td class="px-5 sm:px-6 py-4">

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interview Completed</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    @vite(['resources/css/app.css'])
 </head>
 <body class="bg-slate-950 min-h-screen text-slate-100 font-sans flex items-center justify-center p-6">
     <div class="relative z-10 max-w-md w-full backdrop-blur-2xl bg-white/[0.03] border border-white/[0.08] rounded-[2rem] p-10 text-center space-y-8 shadow-[0_0_40px_rgba(0,0,0,0.5)]">

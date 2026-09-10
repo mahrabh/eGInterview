@@ -113,6 +113,10 @@
                             </span>
                         </div>
                         <div class="flex items-center justify-between gap-3 text-sm">
+                            <span class="text-slate-500">Billing</span>
+                            <a href="{{ route('billing.index') }}" class="font-semibold text-indigo-600 hover:text-indigo-500">View history →</a>
+                        </div>
+                        <div class="flex items-center justify-between gap-3 text-sm">
                             <span class="text-slate-500">Status</span>
                             @php
                                 $accountStatus = Auth::user()->accountStatusLabel();

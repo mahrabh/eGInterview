@@ -104,13 +104,13 @@
                     <tr class="hover:bg-slate-50 transition-colors group">
                         <td class="px-5 sm:px-6 py-4">
                             <div class="flex items-center gap-3 sm:gap-4">
-                                @if($item->candidate_photo)
+                                @if($item->has_candidate_photo)
                                     <button type="button"
                                             data-action="show-photo"
                                             data-name="{{ $item->candidate_name }}"
-                                            data-photo="{{ $item->candidate_photo }}"
+                                            data-photo="{{ route('interviews.photo', $item) }}"
                                             class="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0 focus:outline-none hover:ring-2 hover:ring-indigo-200 transition">
-                                        <img src="{{ $item->candidate_photo }}" alt="{{ $item->candidate_name }}'s photo" class="w-10 h-10 object-cover">
+                                        <img src="{{ route('interviews.photo', $item) }}" alt="{{ $item->candidate_name }}'s photo" class="w-10 h-10 object-cover" loading="lazy">
                                     </button>
                                 @else
                                     <div class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm shrink-0">
@@ -120,7 +120,7 @@
                                 <div class="min-w-0">
                                     <h3 class="font-semibold text-slate-900 text-sm truncate">{{ $item->candidate_name }}</h3>
                                     <p class="text-xs text-slate-500 mt-0.5 truncate">{{ $item->applied_role }}</p>
-                                    @unless($item->candidate_photo)
+                                    @unless($item->has_candidate_photo)
                                         <p class="text-[11px] text-slate-400 mt-0.5">No photo captured</p>
                                     @endunless
                                 </div>
@@ -202,7 +202,7 @@
                                     <button type="button"
                                             data-action="show-transcript"
                                             data-name="{{ $item->candidate_name }}"
-                                            data-transcript="{{ base64_encode($item->transcript_text ?? '') }}"
+                                            data-details-url="{{ route('interviews.details', $item) }}"
                                             class="inline-flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-semibold text-xs transition-colors">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                                         Transcript
@@ -212,7 +212,7 @@
                                         <button type="button"
                                                 data-action="show-evaluation"
                                                 data-name="{{ $item->candidate_name }}"
-                                                data-evaluation="{{ base64_encode(json_encode($eval)) }}"
+                                                data-details-url="{{ route('interviews.details', $item) }}"
                                                 class="inline-flex items-center gap-2 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl font-semibold text-xs transition-colors">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
                                             Full Report
@@ -306,11 +306,7 @@
         function showTranscript(name, text) {
             document.getElementById('modal-title').innerText = "Transcript: " + name;
             const body = document.getElementById('modal-body');
-            let transcript = '';
-
-            if (typeof text === 'string' && text !== '') {
-                transcript = decodeBase64Utf8(text);
-            }
+            const transcript = typeof text === 'string' ? text : '';
 
             if (!transcript || transcript.trim() === '') {
                 body.innerHTML = '<div class="text-center text-slate-400 py-10">No transcript available</div>';
@@ -350,11 +346,9 @@
             const body = document.getElementById('modal-body');
             
             try {
-                let evaluationString = evaluationJson;
-                if (typeof evaluationJson === 'string' && evaluationJson !== '') {
-                    evaluationString = decodeBase64Utf8(evaluationJson);
-                }
-                const evaluation = typeof evaluationString === 'string' ? JSON.parse(evaluationString) : evaluationString;
+                const evaluation = typeof evaluationJson === 'string'
+                    ? JSON.parse(evaluationJson)
+                    : evaluationJson;
                 
                 let html = `
                     <div class="space-y-8 text-slate-700">
@@ -384,7 +378,7 @@
                                     Strengths
                                 </h4>
                                 <ul class="space-y-3">
-                                    ${evaluation.strengths.map(s => `
+                                    ${(evaluation.strengths || []).map(s => `
                                         <li class="flex items-start gap-3 text-sm">
                                             <svg class="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                                             <span class="opacity-90">${s}</span>
@@ -399,7 +393,7 @@
                                     Areas to Improve
                                 </h4>
                                 <ul class="space-y-3">
-                                    ${evaluation.weaknesses.map(w => `
+                                    ${(evaluation.weaknesses || []).map(w => `
                                         <li class="flex items-start gap-3 text-sm">
                                             <svg class="w-4 h-4 text-rose-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                                             <span class="opacity-90">${w}</span>
@@ -418,22 +412,49 @@
             openModal();
         }
 
+        async function loadInterviewDetails(url) {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load interview details');
+            }
+
+            return response.json();
+        }
+
         // Event listeners for data-action buttons
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', async function(e) {
             const button = e.target.closest('[data-action]');
             if (!button) return;
             
             const action = button.getAttribute('data-action');
-            if (action === 'show-evaluation') {
-                const name = button.getAttribute('data-name');
-                const evaluation = button.getAttribute('data-evaluation');
-                showEvaluation(name, evaluation);
-            } else if (action === 'show-transcript') {
-                const name = button.getAttribute('data-name');
-                const transcript = button.getAttribute('data-transcript');
-                showTranscript(name, transcript);
+            const name = button.getAttribute('data-name');
+            const detailsUrl = button.getAttribute('data-details-url');
+
+            if (action === 'show-evaluation' || action === 'show-transcript') {
+                document.getElementById('modal-title').innerText = action === 'show-transcript'
+                    ? ('Transcript: ' + name)
+                    : ('Evaluation: ' + name);
+                document.getElementById('modal-body').innerHTML = '<div class="text-center text-slate-400 py-10">Loading…</div>';
+                openModal();
+
+                try {
+                    const details = await loadInterviewDetails(detailsUrl);
+                    if (action === 'show-transcript') {
+                        showTranscript(name, details.transcript || '');
+                    } else {
+                        showEvaluation(name, details.evaluation || {});
+                    }
+                } catch (err) {
+                    document.getElementById('modal-body').innerHTML = '<div class="text-center text-rose-700 py-10">Unable to load details.</div>';
+                }
             } else if (action === 'show-photo') {
-                const name = button.getAttribute('data-name');
                 const photo = button.getAttribute('data-photo');
                 showPhoto(name, photo);
             }

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\ProfileController;
@@ -59,6 +60,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+    Route::get('/billing/{billing}/invoice', [BillingController::class, 'download'])->name('billing.invoice.download');
+    Route::put('/billing/{billing}', [BillingController::class, 'update'])->name('billing.update');
+    Route::post('/billing/{billing}/void', [BillingController::class, 'void'])->name('billing.void');
+    Route::post('/billing/{billing}/restore', [BillingController::class, 'restore'])->name('billing.restore');
+    Route::post('/billing/users/{user}/recreate', [BillingController::class, 'recreate'])->name('billing.recreate');
+
     /*
     |--------------------------------------------------------------------------
     | Recruitment — Admin + Recruiter
@@ -68,6 +76,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/recruitment', [InterviewController::class, 'index'])->name('recruitment.index');
         Route::get('/interviews/download-template', [InterviewController::class, 'downloadTemplate'])->name('interviews.download-template');
         Route::post('/interviews/import', [InterviewController::class, 'import'])->name('interviews.import');
+        Route::get('/interviews/{interview}/photo', [InterviewController::class, 'photo'])->name('interviews.photo');
+        Route::get('/interviews/{interview}/details', [InterviewController::class, 'details'])->name('interviews.details');
         Route::post('/interviews/{interview}/generate', [InterviewController::class, 'generateQuestions'])->name('interviews.generate');
         Route::get('/interviews/{interview}/review', [InterviewController::class, 'review'])->name('interviews.review');
         Route::post('/interviews/{interview}/approve', [InterviewController::class, 'approve'])->name('interviews.approve');
