@@ -11,6 +11,7 @@ import {
   TranscribeLiveManager,
 } from '../lib/transcribeLiveManager';
 import { LivePcmPlayer, MicCaptureHandle, startMicCapture } from '../lib/liveAudio';
+import { hasBengaliScript, isBanglishOnly } from '../lib/transcriptLanguage';
 
 function uint8ArrayToBase64(bytes: Uint8Array) {
   let binary = '';
@@ -32,7 +33,28 @@ function base64ToUint8Array(b64: string) {
 const CLOSING_MESSAGE_BN = "আপনার সময় ও প্রয়োজনীয় তথ্য দেওয়ার জন্য ধন্যবাদ। সাক্ষাৎকারটি সম্পন্ন করতে অনুগ্রহ করে 'End Session' বাটনে ক্লিক করুন।";
 const CLOSING_MESSAGE_EN = "Thank you for your time and for providing the required information. Please click the End Session button to complete the interview.";
 
-const ASSISTANT_TURN_SPLIT_PATTERN = /(?<=[।!?])\s*(?=ডাউন পেমেন্ট|বর্তমানে আপনার|আপনার (?:বাড়ির|বাড়ির|গাড়ির|মাসিক|অন্য|ব্যবসার)|আপনি (?:কী|কি|মোট)|লোনটি|এবার বলুন|আচ্ছা,)/u;
+const ASSISTANT_TURN_SPLIT_PATTERN = /(?<=[।!?])\s*(?=ডাউন পেমেন্ট|বর্তমানে আপনার|আপনার (?:বাড়ির|বাড়ির|গাড়ির|মাসিক|অন্য|ব্যবসার|আয়)|আপনি (?:কী|কি|মোট)|লোনটি|এবার বলুন|আচ্ছা,|ঠিক আছে)/u;
+
+function isAssistantInstructionEcho(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  if (/^(?:নেই|শূন্য)\s*বল(?:ুন|লেই\s*হবে)/u.test(trimmed)) {
+    return true;
+  }
+
+  if (/^[''"]?(?:নেই|no|none)[''"]?\s*(?:বল(?:ুন|লেই\s*হবে)|is fine)?\.?$/iu.test(trimmed)) {
+    return true;
+  }
+
+  if (/^for example|^say exactly|^tell them to say/i.test(trimmed)) {
+    return true;
+  }
+
+  return false;
+}
 
 function extractClosingSegment(text: string): { remainder: string; closing: string | null } {
   const bnIdx = text.indexOf('আপনার সম');
@@ -62,17 +84,25 @@ function splitAssistantMonologue(text: string): string[] {
   const turns: string[] = [];
 
   if (remainder) {
-    const parts = remainder
-      .split(ASSISTANT_TURN_SPLIT_PATTERN)
-      .map((part) => part.trim())
-      .filter(Boolean);
+    // Keep greeting / readiness turn separate from the first checklist question.
+    const greetingSplit = /(?<=\?)\s*(?=আপনি কি ধরণ|আপনি কী ধরণ|What type of loan)/u;
+    const greetingParts = remainder.split(greetingSplit).map((part) => part.trim()).filter(Boolean);
 
-    if (parts.length > 1) {
-      turns.push(...parts);
-    } else {
-      const ackSplit = /(?<=[।])\s*(?=ডাউন পেমেন্ট|এবার বলুন|আপনার (?:বাড়ির|বাড়ির))/u;
-      const ackParts = remainder.split(ackSplit).map((part) => part.trim()).filter(Boolean);
-      turns.push(...(ackParts.length > 1 ? ackParts : [remainder]));
+    const segments = greetingParts.length > 1 ? greetingParts : [remainder];
+
+    for (const segment of segments) {
+      const parts = segment
+        .split(ASSISTANT_TURN_SPLIT_PATTERN)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      if (parts.length > 1) {
+        turns.push(...parts);
+      } else {
+        const ackSplit = /(?<=[।])\s*(?=ডাউন পেমেন্ট|এবার বলুন|আপনার (?:বাড়ির|বাড়ির|মাসিক|আয়)|আপনি কি)/u;
+        const ackParts = segment.split(ackSplit).map((part) => part.trim()).filter(Boolean);
+        turns.push(...(ackParts.length > 1 ? ackParts : [segment]));
+      }
     }
   }
 
@@ -124,6 +154,7 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
   const closingDeliveredRef = useRef(false);
   const intentionalCloseRef = useRef(false);
   const prematureClosingNudgeRef = useRef(false);
+  const skippedAnswerNudgeRef = useRef(false);
   const autoEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closingCountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const urgentNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -249,6 +280,28 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
     window.setTimeout(() => {
       prematureClosingNudgeRef.current = false;
     }, 15000);
+  };
+
+  const nudgeSkippedApplicantAnswer = () => {
+    if (
+      skippedAnswerNudgeRef.current
+      || !sessionRef.current
+      || closingDeliveredRef.current
+      || closingRequestedRef.current
+      || wrapUpStateRef.current === 'closing'
+      || wrapUpStateRef.current === 'closing_done'
+    ) {
+      return;
+    }
+
+    skippedAnswerNudgeRef.current = true;
+    sessionRef.current.sendRealtimeInput({
+      text: "STOP speaking. You asked another question before the applicant answered the previous one (for example business/employer name then income in one turn). Remain silent and WAIT for their spoken answer. Do NOT ask the next checklist item until they answer. Never combine employer/business name with income."
+    });
+
+    window.setTimeout(() => {
+      skippedAnswerNudgeRef.current = false;
+    }, 12000);
   };
 
   const resetClosingState = () => {
@@ -398,7 +451,7 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
 
   const pushTranscriptEntry = (speaker: 'assistant', text: string) => {
     const trimmed = text.trim();
-    if (!trimmed) {
+    if (!trimmed || isAssistantInstructionEcho(trimmed)) {
       return;
     }
 
@@ -407,17 +460,14 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
   };
 
   const finalizeApplicantTranscript = () => {
-    if (!usingTranscribeFallbackRef.current) {
-      return;
-    }
-
     const text = pendingApplicantTextRef.current.trim();
     pendingApplicantTextRef.current = '';
 
-    if (text) {
-      orchestratorRef.current.addParticipantFinal(text, 'applicant');
-      syncTranscript();
+    if (!text) {
+      return;
     }
+
+    commitApplicantFinal(text);
   };
 
   const bufferApplicantText = (text: string) => {
@@ -426,7 +476,32 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
       return;
     }
 
-    pendingApplicantTextRef.current += (pendingApplicantTextRef.current ? ' ' : '') + trimmed;
+    const pending = pendingApplicantTextRef.current.trim();
+    if (!pending) {
+      pendingApplicantTextRef.current = trimmed;
+      return;
+    }
+
+    // Prefer Bengali over a Banglish remake while buffering.
+    if (hasBengaliScript(pending) && isBanglishOnly(trimmed)) {
+      return;
+    }
+    if (isBanglishOnly(pending) && hasBengaliScript(trimmed)) {
+      pendingApplicantTextRef.current = trimmed;
+      return;
+    }
+
+    // Live input transcription is often cumulative; replace instead of double-appending.
+    if (trimmed.startsWith(pending) || trimmed.includes(pending)) {
+      pendingApplicantTextRef.current = trimmed;
+      return;
+    }
+
+    if (pending.startsWith(trimmed) || pending.includes(trimmed)) {
+      return;
+    }
+
+    pendingApplicantTextRef.current = `${pending} ${trimmed}`;
   };
 
   const flushAssistantTranscript = (options?: { allowClosing?: boolean }) => {
@@ -445,8 +520,33 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
       turns = turns.filter((turn) => !isClosingMessage(turn));
     }
 
+    const questionTurns = turns.filter((turn) => QUESTION_MARKERS.test(turn));
+    const combinedMultipleQuestions = questionTurns.length > 1;
+
     for (const turn of turns) {
       pushTranscriptEntry('assistant', turn);
+    }
+
+    // Only intervene when the model stacked questions without an applicant answer between them.
+    if (combinedMultipleQuestions) {
+      nudgeSkippedApplicantAnswer();
+      return;
+    }
+
+    const entries = transcriptRef.current;
+    let stackedAssistantQuestions = 0;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i];
+      if (entry.speaker === 'applicant' && entry.text.trim()) {
+        break;
+      }
+      if (entry.speaker === 'assistant' && QUESTION_MARKERS.test(entry.text)) {
+        stackedAssistantQuestions += 1;
+      }
+    }
+
+    if (stackedAssistantQuestions > 1) {
+      nudgeSkippedApplicantAnswer();
     }
   };
 
@@ -470,8 +570,29 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
         return;
       }
 
+      // AI lines first, then any buffered applicant speech — keeps serial order.
       flushAssistantTranscript();
+      finalizeApplicantTranscript();
     }, ASSISTANT_TRANSCRIPT_DELAY_MS);
+  };
+
+  const commitApplicantFinal = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    // If the AI turn already finished speaking/transcribing, commit it before this answer.
+    if (
+      assistantTurnCompleteRef.current
+      && pendingAssistantTextRef.current.trim()
+      && !pcmPlayerRef.current?.isPlaying()
+    ) {
+      flushAssistantTranscript();
+    }
+
+    orchestratorRef.current.addParticipantFinal(trimmed, 'applicant');
+    syncTranscript();
   };
 
   const bufferAssistantText = (text: string) => {
@@ -616,8 +737,8 @@ ALWAYS REQUIRED:
 3. Requested loan amount — exact BDT figure (no ranges)
 4. Requested tenure — exact number of MONTHS (convert years to months if needed)
 5. Income source — salaried, business, self-employed, etc.
-6. Employer or business name (separate question — do NOT combine with income)
-7. Net monthly income — exact BDT monthly amount (separate question — do NOT combine with employer)
+6. Employer or business name (ONE turn alone — WAIT for the spoken answer before item 7)
+7. Net monthly income — exact BDT monthly amount (ONLY after employer/business name is answered — never same turn)
 8. Other regular monthly income — exact BDT amount, or confirm none/zero
 9. Existing monthly loan EMI and obligations — exact BDT amount, or confirm none/zero
 
@@ -645,8 +766,16 @@ STEP 2 — QUESTIONS (strictly one at a time)
 - Skip any item the applicant already answered clearly
 - NEVER ask two checklist items in the same turn (e.g. do NOT ask asset price and down payment together)
 - NEVER ask a new question in the same turn as acknowledging a previous answer — acknowledge briefly, STOP, then ask the NEXT item in your following turn
+- NEVER ask employer/business name and monthly income in the same turn or back-to-back without a full applicant answer between them
+- After asking employer/business name, STOP COMPLETELY until the applicant says the name — never jump to monthly income
+- After asking tenure in months, STOP COMPLETELY until the applicant states the month count
+- NEVER repeat the applicant's answer back as a standalone spoken turn (do not restate their business name or amount before the next question)
+- NEVER append the applicant's answer onto your next question
 - NEVER repeat a question the applicant already answered clearly
 - If you asked a question, you MUST wait for the applicant's spoken answer before asking anything else or closing
+- Speak ONLY Bengali script or English — never Banglish/romanized Bangla
+- NEVER speak example applicant answers aloud (e.g. do NOT say "নেই বললেই হবে" yourself)
+- NEVER give the closing/thank-you message until EMI/obligations and every checklist item are clearly answered
 - If the applicant is silent: repeat the SAME question once only, then wait. Do NOT end the interview
 - If they say "I don't know": ask once more simply; if still unknown, record as unknown and move on
 - Ask follow-up ONLY when an answer is ambiguous, contradictory, or a range. One short clarification only
@@ -766,11 +895,11 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
               }
               if (
                 userText &&
-                usingTranscribeFallbackRef.current &&
                 !closingDeliveredRef.current &&
                 wrapUpStateRef.current !== 'closing' &&
                 wrapUpStateRef.current !== 'closing_done'
               ) {
+                // Always buffer live-session STT so applicant turns are not lost when dedicated STT drops.
                 bufferApplicantText(userText);
               }
 
@@ -789,7 +918,7 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
             if (serverContent?.turnComplete) {
                 isTurnCompleteRef.current = true;
                 assistantTurnCompleteRef.current = true;
-                finalizeApplicantTranscript();
+                // Flush AI first (then applicant inside tryFlush). Do not finalize applicant first.
                 tryFlushAssistantTranscript();
             } else if (serverContent) {
                 isTurnCompleteRef.current = false;
@@ -837,6 +966,11 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
 
       // Kick off after the session handle exists. Doing this in onopen races
       // sessionRef assignment and silently skips the AI greeting.
+      const greetingText = `Hello ${applicantFirstName}, I am a professional Bank Loan Agent AI. I am here to help you complete your loan application securely. Are you ready to begin?`;
+      // Ensure greeting always appears first in the stored transcript (STT often misses turn 1).
+      orchestratorRef.current.addAssistantFinal(greetingText);
+      syncTranscript();
+
       session.sendRealtimeInput({
         text: `Begin now. First words must be exactly "Hello ${applicantFirstName}," then introduce yourself as Bank Loan Agent AI and ask if they are ready. Do NOT start with নমস্কার. Then wait. Ask one checklist question per turn. Never say লিখুন or ask two questions in one turn.`,
       });
@@ -855,6 +989,7 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
               context: 'loan',
               orchestrator: orchestratorRef.current,
               onTranscriptChange: () => syncTranscript(),
+              onParticipantFinal: (text) => commitApplicantFinal(text),
               onFallbackChange: (usingFallback) => {
                 usingTranscribeFallbackRef.current = usingFallback;
               },
@@ -943,12 +1078,12 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
       setIsConnecting(false);
     setIsMuted(true);
 
-    finalizeApplicantTranscript();
     if (pendingAssistantTextRef.current.trim()) {
       flushAssistantTranscript({
         allowClosing: closingDeliveredRef.current || closingRequestedRef.current,
       });
     }
+    finalizeApplicantTranscript();
 
     const transcriptText = orchestratorRef.current.toSaveFormat('Applicant');
 

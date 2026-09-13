@@ -15,6 +15,8 @@ export interface TranscribeLiveManagerOptions {
   orchestrator: TranscriptOrchestrator;
   onTranscriptChange: () => void;
   onFallbackChange: (usingFallback: boolean) => void;
+  /** Optional: control when participant lines are committed (for Q→A order). */
+  onParticipantFinal?: (text: string) => void;
 }
 
 const TRANSCRIBE_SESSION_LIMIT_MS = 9 * 60 * 1000;
@@ -253,18 +255,28 @@ export class TranscribeLiveManager {
     const payload = message as any;
     const serverContent = payload.serverContent;
 
-    const interimText =
+    const interimText = (
       serverContent?.interimInputTranscription?.text
-      || serverContent?.inputAudioTranscription?.text;
+      || serverContent?.inputAudioTranscription?.text
+      || ''
+    ).trim();
 
-    if (interimText && !serverContent?.turnComplete && !serverContent?.inputTranscription?.finished) {
+    const finished = Boolean(
+      serverContent?.turnComplete
+      || serverContent?.inputTranscription?.finished
+      || serverContent?.inputAudioTranscription?.finished
+      || payload?.inputTranscription?.finished
+    );
+
+    // Keep streaming hypotheses quiet until the utterance is marked finished.
+    if (interimText && !finished) {
       return;
     }
 
     const finalText = (
       serverContent?.inputTranscription?.text
       || payload.inputTranscription?.text
-      || (serverContent?.turnComplete ? interimText : '')
+      || (finished ? interimText : '')
     )?.trim();
 
     if (!finalText || finalText === this.lastFinalText) {
@@ -272,8 +284,13 @@ export class TranscribeLiveManager {
     }
 
     this.lastFinalText = finalText;
-    this.options.orchestrator.addParticipantFinal(finalText, this.options.participantSpeaker);
-    this.options.onTranscriptChange();
+
+    if (this.options.onParticipantFinal) {
+      this.options.onParticipantFinal(finalText);
+    } else {
+      this.options.orchestrator.addParticipantFinal(finalText, this.options.participantSpeaker);
+      this.options.onTranscriptChange();
+    }
   }
 
   private async enableFallback(reason: string): Promise<void> {

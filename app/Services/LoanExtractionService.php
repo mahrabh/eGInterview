@@ -673,27 +673,47 @@ PROMPT
     private function normaliseTenure(mixed $value): ?int
     {
         if (is_int($value)) {
-            return $value > 0 ? $value : null;
+            $months = $value;
+
+            return ($months > 0 && $months <= 360) ? $months : null;
         }
 
         if (is_float($value)) {
-            return $value > 0 ? (int) round($value) : null;
+            $months = (int) round($value);
+
+            return ($months > 0 && $months <= 360) ? $months : null;
         }
 
         if (!is_string($value) || trim($value) === '') {
             return null;
         }
 
-        $value = strtr(mb_strtolower(trim($value)), [
+        $original = trim($value);
+        $value = strtr(mb_strtolower($original), [
             '০' => '0', '১' => '1', '২' => '2', '৩' => '3', '৪' => '4',
             '৫' => '5', '৬' => '6', '৭' => '7', '৮' => '8', '৯' => '9',
             '०' => '0', '१' => '1', '२' => '2', '३' => '3', '४' => '4',
             '५' => '5', '६' => '6', '७' => '7', '८' => '8', '९' => '9',
         ]);
 
+        $value = $this->replaceSpokenNumberWords($value);
+
+        // Reject income/amount answers mis-parsed as tenure (e.g. "90,000 টাকা" -> 90).
+        if (preg_match('/(?:টাকা|salary|income|আয়|আর্ন|earn|earning|লাখ|লক্ষ|lakh|crore|কোটি|hazar|হাজার|,\d{3})/iu', $original) === 1) {
+            return null;
+        }
+
+        if (preg_match('/(?:monthly|per month|মাসিক|নিট.*আয়|monthly income)/iu', $value) === 1) {
+            return null;
+        }
+
         if (preg_match('/\d\s*(?:-|–|—|to|থেকে)\s*\d/ui', $value) === 1) {
             return null;
         }
+
+        $hasTenureContext = preg_match('/(?:month|months|mash|মাস|tenure|duration|repayment|বছর|year|years|yr|yrs)/iu', $value) === 1;
+
+        $value = str_replace(',', '', $value);
 
         if (preg_match('/\d+(?:\.\d+)?/', $value, $matches) !== 1) {
             return null;
@@ -701,13 +721,17 @@ PROMPT
 
         $tenure = (float) $matches[0];
 
+        if (!$hasTenureContext && $tenure > 600) {
+            return null;
+        }
+
         if (preg_match('/(?:year|years|yr|yrs|বছর|সাল|साल)/u', $value) === 1) {
             $tenure *= 12;
         }
 
         $months = (int) round($tenure);
 
-        return $months > 0 ? $months : null;
+        return ($months > 0 && $months <= 360) ? $months : null;
     }
 
     private function replaceSpokenNumberWords(string $value): string
@@ -766,6 +790,7 @@ PROMPT
             'আঠারো' => '18',
             'উনিশ' => '19',
             'বিশ' => '20',
+            'চব্বিশ' => '24',
             'ত্রিশ' => '30',
             'চল্লিশ' => '40',
             'পঞ্চাশ' => '50',
@@ -1023,21 +1048,13 @@ PROMPT
                 'text'
             ),
             'requested_amount' => $this->supplementLoanAmountFromPairs($pairs),
-            'requested_tenure' => $this->supplementFromPairs(
-                $pairs,
-                ['tenure', 'how many month', 'repayment period', 'loan period', 'মাস', 'বছর', 'duration'],
-                'tenure'
-            ),
+            'requested_tenure' => $this->supplementTenureFromPairs($pairs),
             'income_source' => $this->supplementFromPairs(
                 $pairs,
                 ['income source', 'source of income', 'employment type', 'occupation', 'আয়ের উৎস', 'কাজের ধরন'],
                 'text'
             ),
-            'employer_name' => $this->supplementFromPairs(
-                $pairs,
-                ['employer', 'company name', 'business name', 'where do you work', 'organization', 'প্রতিষ্ঠান', 'কোম্পানি', 'ব্যবসার নাম'],
-                'text'
-            ),
+            'employer_name' => $this->supplementEmployerFromPairs($pairs),
             'exact_monthly_income' => $this->supplementMonthlyIncome($pairs, $turns),
             'other_regular_monthly_income' => $this->supplementFromPairs(
                 $pairs,
@@ -1076,6 +1093,18 @@ PROMPT
                 $data['requested_amount'] = $requestedAmountSupplement;
             }
         }
+
+        $tenureFromApplicant = $this->supplementTenureFromApplicantTurns($turns);
+        if ($tenureFromApplicant !== null) {
+            $data['requested_tenure'] = $tenureFromApplicant;
+        }
+
+        $employerFromTurns = $this->supplementEmployerFromApplicantTurns($turns);
+        if ($employerFromTurns !== null && ($data['employer_name']['value'] ?? null) === null) {
+            $data['employer_name'] = $employerFromTurns;
+        }
+
+        $data = $this->scrubIncomeMisreadTenure($data, $transcript);
 
         return $this->refreshExtractionMeta($data, $transcript);
     }
@@ -1231,18 +1260,337 @@ PROMPT
     {
         $pairs = [];
 
-        for ($index = 0; $index < count($turns) - 1; $index++) {
-            if ($turns[$index]['speaker'] !== 'AI' || $turns[$index + 1]['speaker'] !== 'Candidate') {
+        for ($index = 0; $index < count($turns); $index++) {
+            if ($turns[$index]['speaker'] !== 'Candidate') {
+                continue;
+            }
+
+            $question = null;
+
+            for ($previous = $index - 1; $previous >= 0; $previous--) {
+                if ($turns[$previous]['speaker'] === 'Candidate') {
+                    break;
+                }
+
+                if ($turns[$previous]['speaker'] === 'AI') {
+                    $question = $turns[$previous]['text'];
+                }
+            }
+
+            if ($question === null) {
                 continue;
             }
 
             $pairs[] = [
-                'question' => $turns[$index]['text'],
-                'answer' => $turns[$index + 1]['text'],
+                'question' => $question,
+                'answer' => $turns[$index]['text'],
             ];
         }
 
         return $pairs;
+    }
+
+    /** @param list<array{question: string, answer: string}> $pairs */
+    private function supplementTenureFromPairs(array $pairs): ?array
+    {
+        $includePatterns = [
+            'tenure',
+            'how many month',
+            'repayment period',
+            'loan period',
+            'duration',
+            'কত মাস',
+            'মাসের জন্য',
+            'মাসের সংখ্য',
+            'পরিশোধ',
+            'সময় নিতে',
+        ];
+        $excludePatterns = [
+            'monthly income',
+            'net income',
+            'income',
+            'salary',
+            'employer',
+            'business name',
+            'emi',
+            'obligation',
+            'asset',
+            'down payment',
+            'মাসিক',
+            'নিট',
+            'আয়',
+            'আর্ন',
+            'কিস্তি',
+            'প্রতিষ্ঠান',
+            'ব্যবসার নাম',
+        ];
+
+        foreach ($pairs as $pair) {
+            $question = mb_strtolower($pair['question']);
+            $matched = false;
+
+            foreach ($includePatterns as $pattern) {
+                if (preg_match('/' . $pattern . '/iu', $question) === 1) {
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if (!$matched) {
+                continue;
+            }
+
+            foreach ($excludePatterns as $pattern) {
+                if (preg_match('/' . $pattern . '/iu', $question) === 1) {
+                    $matched = false;
+                    break;
+                }
+            }
+
+            if (!$matched) {
+                continue;
+            }
+
+            $tenure = $this->normaliseTenure($pair['answer']);
+
+            if ($tenure !== null) {
+                return [
+                    'value' => $tenure,
+                    'evidence' => mb_substr($pair['answer'], 0, 200),
+                    'confidence' => 82.0,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /** @param list<array{speaker: string, text: string}> $turns */
+    private function supplementTenureFromApplicantTurns(array $turns): ?array
+    {
+        foreach ($turns as $turn) {
+            if ($turn['speaker'] !== 'Candidate') {
+                continue;
+            }
+
+            $text = trim($turn['text']);
+
+            if ($text === '') {
+                continue;
+            }
+
+            if (preg_match('/(?:month|months|mash|মাস|tenure|duration|বছর|year|years)/iu', $text) !== 1) {
+                continue;
+            }
+
+            if (preg_match('/(?:আয়|আর্ন|earn|earning|salary|income|লাখ|লক্ষ|lakh|টাকা)/iu', $text) === 1) {
+                continue;
+            }
+
+            $tenure = $this->normaliseTenure($text);
+
+            if ($tenure !== null) {
+                return [
+                    'value' => $tenure,
+                    'evidence' => mb_substr($text, 0, 200),
+                    'confidence' => 88.0,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /** @param list<array{question: string, answer: string}> $pairs */
+    private function supplementEmployerFromPairs(array $pairs): ?array
+    {
+        $includePatterns = [
+            'employer',
+            'company name',
+            'business name',
+            'where do you work',
+            'organization',
+            'প্রতিষ্ঠান',
+            'কোম্পানি',
+            'ব্যবসার নাম',
+            'কাজ করেন.*নাম',
+            'চাকরি করেন.*নাম',
+        ];
+        $excludePatterns = [
+            'monthly income',
+            'net income',
+            'income source',
+            'মাসিক',
+            'নিট.*আয়',
+            'আয়ের উৎস',
+            'কত টাকা',
+        ];
+
+        foreach ($pairs as $pair) {
+            $question = mb_strtolower($pair['question']);
+            $matched = false;
+
+            foreach ($includePatterns as $pattern) {
+                if (preg_match('/' . $pattern . '/iu', $question) === 1) {
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if (!$matched) {
+                continue;
+            }
+
+            foreach ($excludePatterns as $pattern) {
+                if (preg_match('/' . $pattern . '/iu', $question) === 1) {
+                    $matched = false;
+                    break;
+                }
+            }
+
+            if (!$matched) {
+                continue;
+            }
+
+            $name = $this->normaliseEmployerName($pair['answer']);
+
+            if ($name !== null) {
+                return [
+                    'value' => $name,
+                    'evidence' => mb_substr($pair['answer'], 0, 200),
+                    'confidence' => 85.0,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /** @param list<array{speaker: string, text: string}> $turns */
+    private function supplementEmployerFromApplicantTurns(array $turns): ?array
+    {
+        for ($index = 0; $index < count($turns); $index++) {
+            if ($turns[$index]['speaker'] !== 'AI') {
+                continue;
+            }
+
+            $question = $turns[$index]['text'];
+
+            if (preg_match('/(?:employer|company name|business name|organization|প্রতিষ্ঠান|কোম্পানি|ব্যবসার নাম|কাজ করেন.*নাম|চাকরি করেন.*নাম)/iu', $question) !== 1) {
+                continue;
+            }
+
+            if (preg_match('/(?:monthly income|net income|মাসিক|নিট.*আয়|আয়ের উৎস)/iu', $question) === 1) {
+                continue;
+            }
+
+            for ($next = $index + 1; $next < count($turns); $next++) {
+                if ($turns[$next]['speaker'] === 'AI') {
+                    // Skip stacked AI questions until we find the applicant reply.
+                    continue;
+                }
+
+                if ($turns[$next]['speaker'] !== 'Candidate') {
+                    break;
+                }
+
+                $name = $this->normaliseEmployerName($turns[$next]['text']);
+
+                if ($name !== null) {
+                    return [
+                        'value' => $name,
+                        'evidence' => mb_substr($turns[$next]['text'], 0, 200),
+                        'confidence' => 88.0,
+                    ];
+                }
+
+                break;
+            }
+        }
+
+        return null;
+    }
+
+    private function normaliseEmployerName(mixed $value): ?string
+    {
+        $text = $this->normaliseText($value);
+
+        if ($text === null) {
+            return null;
+        }
+
+        // Reject income/amount-only answers that got paired with the employer question.
+        if (preg_match('/(?:\d|লাখ|লক্ষ|lakh|crore|কোটি|টাকা)/u', $text) === 1
+            && preg_match('/(?:plc|ltd|limited|company|inc|corp|পিএলসি|লিমিটেড|কোম্পানি|প্রতিষ্ঠান|ট্রেড|enterprise)/iu', $text) !== 1) {
+            return null;
+        }
+
+        if (preg_match('/^(?:নেই|না|none|no|n\/a|unknown)$/iu', $text) === 1) {
+            return null;
+        }
+
+        // Prefer the named org when phrased as "প্রতিষ্ঠানের নাম X" / "business name is X".
+        if (preg_match('/(?:নাম|name)\s*(?:হচ্ছে|হলো|হল|is|:)?\s*(.+)$/iu', $text, $matches) === 1) {
+            $candidate = $this->normaliseText($matches[1]);
+
+            if ($candidate !== null) {
+                return $candidate;
+            }
+        }
+
+        return $text;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function scrubIncomeMisreadTenure(array $data, string $transcript): array
+    {
+        $tenure = $data['requested_tenure']['value'] ?? null;
+
+        if (!is_numeric($tenure)) {
+            return $data;
+        }
+
+        $tenureInt = (int) round((float) $tenure);
+
+        if ($tenureInt <= 0) {
+            return $data;
+        }
+
+        if ($this->transcriptMentionsTenureMonths($transcript, $tenureInt)) {
+            return $data;
+        }
+
+        $income = $data['exact_monthly_income']['value'] ?? null;
+
+        if (!is_numeric($income)) {
+            return $data;
+        }
+
+        $incomeInt = (int) round((float) $income);
+
+        if ($tenureInt >= 10 && $tenureInt <= 99
+            && $incomeInt >= ($tenureInt * 1000)
+            && $incomeInt < (($tenureInt + 1) * 1000)) {
+            $data['requested_tenure']['value'] = null;
+        }
+
+        return $data;
+    }
+
+    private function transcriptMentionsTenureMonths(string $transcript, int $months): bool
+    {
+        $monthText = (string) $months;
+
+        if (preg_match('/(?:\b|[^\d])' . preg_quote($monthText, '/') . '\s*(?:months?|mash|মাস)/iu', $transcript) === 1) {
+            return true;
+        }
+
+        $bengaliDigits = strtr($monthText, [
+            '0' => '০', '1' => '১', '2' => '২', '3' => '৩', '4' => '৪',
+            '5' => '৫', '6' => '৬', '7' => '৭', '8' => '৮', '9' => '৯',
+        ]);
+
+        return preg_match('/(?:\b|[^\d])' . preg_quote($bengaliDigits, '/') . '\s*(?:months?|mash|মাস)/iu', $transcript) === 1;
     }
 
     /** @param list<array{question: string, answer: string}> $pairs */

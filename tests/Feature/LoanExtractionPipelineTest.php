@@ -532,6 +532,110 @@ class LoanExtractionPipelineTest extends TestCase
         $this->assertSame('10000000.00', (string) $fresh->requested_amount);
     }
 
+    public function test_income_amount_is_not_used_as_requested_tenure(): void
+    {
+        $transcript = implode("\n", [
+            'AI: আপনি এই লোনটি কত মাসের জন্য নিতে চান? অনুগ্রহ করে সঠিক মাস সংখ্যাটি বলুন।',
+            'AI: ঠিক আছে। আপনার আয়ের উৎস কি?',
+            'Applicant: আমি চাকরি করি',
+            'AI: এবার বলুন, আপনার মাসিক নিট আয় কত?',
+            'Applicant: আমার মাসিক আয় 90,000 টাকা',
+        ]);
+
+        $application = $this->createSubmittedApplication($transcript);
+
+        $this->fakeGeminiExtraction([
+            'loan_type' => $this->field('personal'),
+            'loan_purpose' => $this->field('জমি কেনার জন্য'),
+            'requested_amount' => $this->field(200000),
+            'requested_tenure' => $this->field(90),
+            'exact_monthly_income' => $this->field(90000),
+            'income_source' => $this->field('চাকরি'),
+            'employer_name' => $this->field('eGeneration PLC'),
+            'other_regular_monthly_income' => $this->field(0),
+            'existing_monthly_obligations' => $this->field(0),
+            'asset_value' => $this->field(null),
+            'down_payment' => $this->field(null),
+        ]);
+
+        $service = new LoanExtractionService();
+        $this->assertTrue($service->extract($application));
+
+        $fresh = $application->fresh();
+        $this->assertNull($fresh->extracted_data['requested_tenure']['value'] ?? null);
+    }
+
+    public function test_applicant_tenure_turn_overrides_wrong_gemini_tenure(): void
+    {
+        $transcript = implode("\n", [
+            'AI: আপনি এই লোনটি কত মাসের জন্য নিতে চান? অনুগ্রহ করে সঠিক মাস সংখ্যাটি বলুন।',
+            'Applicant: 24 মাস নিতে চাই',
+            'AI: ঠিক আছে। আপনার আয়ের উৎস কি?',
+            'Applicant: আমি চাকরি করি',
+            'AI: এবার বলুন, আপনার মাসিক নিট আয় কত?',
+            'Applicant: আমার মাসিক আয় 90,000 টাকা',
+        ]);
+
+        $application = $this->createSubmittedApplication($transcript);
+
+        $this->fakeGeminiExtraction([
+            'loan_type' => $this->field('personal'),
+            'loan_purpose' => $this->field('জমি কেনার জন্য'),
+            'requested_amount' => $this->field(200000),
+            'requested_tenure' => $this->field(90),
+            'exact_monthly_income' => $this->field(90000),
+            'income_source' => $this->field('চাকরি'),
+            'employer_name' => $this->field('eGeneration PLC'),
+            'other_regular_monthly_income' => $this->field(0),
+            'existing_monthly_obligations' => $this->field(0),
+            'asset_value' => $this->field(null),
+            'down_payment' => $this->field(null),
+        ]);
+
+        $service = new LoanExtractionService();
+        $this->assertTrue($service->extract($application));
+
+        $fresh = $application->fresh();
+        $this->assertSame(24, $fresh->extracted_data['requested_tenure']['value'] ?? null);
+        $this->assertSame(24, $fresh->tenure_months);
+    }
+
+    public function test_employer_name_is_filled_from_business_name_answer(): void
+    {
+        $transcript = implode("\n", [
+            'AI: আপনি কি চাকরি করেন, নাকি ব্যবসা? নাকি অন্য কিছু?',
+            'Applicant: আমি ব্যবসা করি',
+            'AI: আপনার ব্যবসার নাম কি?',
+            'Applicant: ই জেনারেশন পিএলসি',
+            'AI: আপনার মাসিক নিট আয় কত?',
+            'Applicant: আমার মাসিক আয় হচ্ছে এক লক্ষ টাকা',
+        ]);
+
+        $application = $this->createSubmittedApplication($transcript);
+
+        $this->fakeGeminiExtraction([
+            'loan_type' => $this->field('personal'),
+            'loan_purpose' => $this->field('জমি কেনার জন্য'),
+            'requested_amount' => $this->field(100000),
+            'requested_tenure' => $this->field(24),
+            'exact_monthly_income' => $this->field(100000),
+            'income_source' => $this->field('ব্যবসা'),
+            'employer_name' => $this->field(null, '', 30),
+            'other_regular_monthly_income' => $this->field(100000),
+            'existing_monthly_obligations' => $this->field(0),
+            'asset_value' => $this->field(null),
+            'down_payment' => $this->field(null),
+            'missing_fields' => ['employer_name'],
+        ]);
+
+        $service = new LoanExtractionService();
+        $this->assertTrue($service->extract($application));
+
+        $fresh = $application->fresh();
+        $this->assertSame('ই জেনারেশন পিএলসি', $fresh->extracted_data['employer_name']['value'] ?? null);
+        $this->assertSame('ই জেনারেশন পিএলসি', $fresh->employer_name);
+    }
+
     private function createSubmittedApplication(string $transcript): LoanApplication
     {
         return LoanApplication::create([

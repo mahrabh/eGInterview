@@ -1,4 +1,10 @@
-import { sanitizeParticipantTranscript } from './transcriptLanguage';
+import {
+  cleanAssistantTranscriptText,
+  isBanglishOnly,
+  isNearDuplicateUtterance,
+  preferTranscriptText,
+  sanitizeParticipantTranscript,
+} from './transcriptLanguage';
 
 export type ParticipantSpeaker = 'applicant' | 'candidate';
 
@@ -16,7 +22,18 @@ export class TranscriptOrchestrator {
   private sequence = 0;
 
   addAssistantFinal(text: string): void {
-    this.addFinal('assistant', text);
+    const lastApplicant = [...this.entries].reverse().find((entry) => entry.speaker !== 'assistant');
+    const cleaned = cleanAssistantTranscriptText(text, lastApplicant?.text ?? null);
+    if (!cleaned) {
+      return;
+    }
+
+    if (this.mergeIfNearDuplicate(cleaned, 'assistant')) {
+      return;
+    }
+
+    // Always append in arrival order — never splice earlier (that scrambled Q/A).
+    this.entries.push(this.makeEntry('assistant', cleaned));
   }
 
   addParticipantFinal(text: string, speaker: ParticipantSpeaker): void {
@@ -25,17 +42,32 @@ export class TranscriptOrchestrator {
       return;
     }
 
-    this.addFinal(speaker, sanitized);
+    // Prefer an existing Bengali answer over a Banglish remake of the same turn.
+    for (let i = this.entries.length - 1; i >= Math.max(0, this.entries.length - 5); i--) {
+      const recent = this.entries[i];
+      if (recent.speaker !== speaker) {
+        continue;
+      }
+
+      if (!isNearDuplicateUtterance(recent.text, sanitized)) {
+        continue;
+      }
+
+      // Already have Bengali; ignore Banglish twin.
+      if (!isBanglishOnly(recent.text) && isBanglishOnly(sanitized)) {
+        return;
+      }
+
+      recent.text = preferTranscriptText(recent.text, sanitized);
+      recent.timestamp = Date.now();
+      return;
+    }
+
+    this.entries.push(this.makeEntry(speaker, sanitized));
   }
 
   getEntries(): TranscriptEntry[] {
-    return [...this.entries].sort((a, b) => {
-      if (a.timestamp !== b.timestamp) {
-        return a.timestamp - b.timestamp;
-      }
-
-      return a.sequence - b.sequence;
-    });
+    return [...this.entries];
   }
 
   toSaveFormat(participantLabel: 'Applicant' | 'Candidate'): string {
@@ -52,23 +84,30 @@ export class TranscriptOrchestrator {
     this.sequence = entries.reduce((max, entry) => Math.max(max, entry.sequence), 0) + 1;
   }
 
-  private addFinal(speaker: TranscriptEntry['speaker'], text: string): void {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      return;
+  private mergeIfNearDuplicate(text: string, speaker: TranscriptEntry['speaker']): boolean {
+    for (let i = this.entries.length - 1; i >= Math.max(0, this.entries.length - 4); i--) {
+      const recent = this.entries[i];
+      if (recent.speaker !== speaker) {
+        continue;
+      }
+
+      if (isNearDuplicateUtterance(recent.text, text)) {
+        recent.text = preferTranscriptText(recent.text, text);
+        recent.timestamp = Date.now();
+        return true;
+      }
     }
 
-    const last = this.entries[this.entries.length - 1];
-    if (last && last.speaker === speaker && last.text === trimmed) {
-      return;
-    }
+    return false;
+  }
 
-    this.entries.push({
+  private makeEntry(speaker: TranscriptEntry['speaker'], text: string): TranscriptEntry {
+    return {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       speaker,
-      text: trimmed,
+      text,
       timestamp: Date.now(),
       sequence: this.sequence++,
-    });
+    };
   }
 }
