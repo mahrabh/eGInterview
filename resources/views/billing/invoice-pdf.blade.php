@@ -28,7 +28,7 @@
         <table width="100%">
             <tr>
                 <td>
-                    <div class="brand">eg<span>Meet</span> AI</div>
+                    <div class="brand">eG<span>Credit</span> AI</div>
                     <div class="muted" style="margin-top:6px;">{{ $company['email'] }}</div>
                 </td>
                 <td style="text-align:right;">

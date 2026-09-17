@@ -184,7 +184,7 @@ class BillingController extends Controller
             'payment' => $billing,
             'invoiceNo' => $billing->invoice_number,
             'company' => [
-                'name' => 'egMeet AI',
+                'name' => 'eG Credit AI',
                 'email' => 'support@egeneration.co',
             ],
         ])->setPaper('a4');

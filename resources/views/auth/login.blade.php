@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | egMeet AI</title>
+    <title>Login | eG Credit AI</title>
     <link rel="icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
     <link rel="shortcut icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -106,13 +106,12 @@
                     <div class="relative">
                         <div class="logo-glow absolute inset-0 rounded-xl bg-indigo-500/50 blur-md"></div>
                         <div class="relative w-11 h-11 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center border border-white/15">
-                            <span class="text-white font-black text-lg">eg</span>
+                            <span class="text-white font-black text-lg">eG</span>
                         </div>
                     </div>
                     <div class="text-left">
-                        <h1 class="text-xl font-black text-white tracking-tight leading-tight">egMeet AI</h1>
+                        <h1 class="text-xl font-black text-white tracking-tight leading-tight">eG Credit AI</h1>
                         <div class="flex items-center gap-2 mt-0.5">
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">AI Interview</p>
                             <div class="eq" aria-hidden="true">
                                 <span></span><span></span><span></span><span></span>
                                 <span></span><span></span><span></span><span></span>

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $title ?? 'egMeet AI' }}</title>
+    <title>{{ $title ?? 'eG Credit AI' }}</title>
     <link rel="icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
     <link rel="shortcut icon" href="{{ asset('favicon.svg') }}?v=egmeet-1" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -305,11 +305,10 @@
                 <div class="flex items-center gap-3 min-w-0">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-3 group min-w-0">
                         <div class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center border border-white/20 group-hover:scale-105 transition-transform bg-gradient-to-br from-indigo-500 to-blue-600 overflow-hidden shadow-lg shadow-indigo-500/20">
-                            <span class="text-white font-black text-base">eg</span>
+                            <span class="text-white font-black text-base">eG</span>
                         </div>
                         <div class="min-w-0">
-                            <h1 class="text-lg sm:text-xl font-black text-white tracking-tight group-hover:text-indigo-200 transition-colors truncate leading-tight">egMeet AI</h1>
-                            <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 hidden sm:block">AI Interview Platform</p>
+                            <h1 class="text-lg sm:text-xl font-black text-white tracking-tight group-hover:text-indigo-200 transition-colors truncate leading-tight">eG Credit AI</h1>
                         </div>
                     </a>
                 </div>
