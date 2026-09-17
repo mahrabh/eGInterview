@@ -11,7 +11,10 @@ const LATIN = /[A-Za-z]/;
 const DISALLOWED_SCRIPTS = /[\u0900-\u097F\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u0600-\u06FF]/;
 
 /** Common romanized Bangla tokens from dual STT (Banglish). */
-const BANGLISH_HINTS = /(?:\bami\b|\bamar\b|\bapnar\b|\bhocche\b|\bhoche\b|\bbyabsha\b|\bbyabshar\b|\bbyabosa\b|\bnam\b|\bmashe\b|\bmash\b|\btaka\b|\btakar\b|\bhoy\b|\bmoto\b|\bkorchi\b|\bkori\b|\bchai\b)/i;
+const BANGLISH_HINTS = /(?:\bami\b|\bamar\b|\bapnar\b|\baapni\b|\bhocche\b|\bhoche\b|\bbyabsha\b|\bbyabshar\b|\bbyabosa\b|\bnam\b|\bmashe\b|\bmash\b|\bmasher\b|\btaka\b|\btakar\b|\bhoy\b|\bmoto\b|\bkorchi\b|\bkori\b|\bkorte\b|\bchai\b|\bbarir\b|\bbari\b|\bjonno\b|\bkoto\b|\bmodhye\b|\bpartan\b|\bamake\b|\bkhetre\b|\bjodi\b|\brupaye\b|\bcalculate\b|\bekchuwali\b|\bactually\b)/i;
+
+/** Loose romanized Bangla syllables often seen in bad STT (e.g. "Barir jonno", "shikay"). */
+const BANGLISH_LOOSE = /(?:barir|bari|jonno|masher|modhye|korto|korte|partan|amake|aapni|shikay|rupaye|byabsha|hocche|nam\s+hocche)/i;
 
 export function containsDisallowedScript(text: string): boolean {
   return DISALLOWED_SCRIPTS.test(text);
@@ -36,12 +39,19 @@ export function isBanglishOnly(text: string): boolean {
   }
 
   // Real English interview lines are not Banglish.
-  if (/^Hello\b/i.test(trimmed) || /\b(?:professional|application|securely|ready to begin|please|thank you)\b/i.test(trimmed)) {
+  if (
+    /^Hello\b/i.test(trimmed)
+    || /\b(?:professional|application|securely|ready to begin|please|thank you|months?|income|business|employer|down payment|personal|home loan|car loan)\b/i.test(trimmed)
+  ) {
     return false;
   }
 
   const letters = trimmed.replace(/[^A-Za-z\u0980-\u09FF]/g, '');
-  if (letters.length < 8) {
+  if (letters.length < 6) {
+    // Very short latin fillers like "Hey." alone are junk when not clear English answers.
+    if (/^(?:hey|hmm+|mhm+|uh+|um+|ah+)$/i.test(trimmed.replace(/[^\w]/g, ''))) {
+      return true;
+    }
     return false;
   }
 
@@ -50,7 +60,20 @@ export function isBanglishOnly(text: string): boolean {
     return false;
   }
 
-  return BANGLISH_HINTS.test(trimmed);
+  if (BANGLISH_HINTS.test(trimmed) || BANGLISH_LOOSE.test(trimmed)) {
+    return true;
+  }
+
+  // Short latin lines with no clear English loan vocabulary → treat as Banglish junk.
+  if (
+    trimmed.length <= 48
+    && !/\b(?:yes|no|ready|loan|month|lakh|lac|crore|income|business|salary|none)\b/i.test(trimmed)
+    && /[aeiou].*[aeiou]/i.test(trimmed)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -60,6 +83,11 @@ export function isBanglishOnly(text: string): boolean {
 export function sanitizeParticipantTranscript(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed) {
+    return null;
+  }
+
+  // Drop romanized Bangla junk entirely — dual STT usually also emits a Bengali/English twin.
+  if (isBanglishOnly(trimmed)) {
     return null;
   }
 
@@ -177,6 +205,12 @@ export function isNearDuplicateUtterance(a: string, b: string): boolean {
     if (nameHints.test(a) && nameHints.test(b)) {
       return true;
     }
+
+    // Purpose / home / bari remakes (e.g. "Hey. Barir jonno" vs "নতুন বাড়ি বানাবো").
+    const purposeHints = /(?:বাড়ি|বাড়ি|barir|bari|jonno|purpose|বানাব|কিনব|home|house)/iu;
+    if (purposeHints.test(a) && purposeHints.test(b)) {
+      return true;
+    }
   }
 
   return false;
@@ -201,18 +235,52 @@ export function preferTranscriptText(existing: string, incoming: string): string
 }
 
 /**
+ * Collapse accidental duplicated sentences inside one AI turn
+ * (e.g. the same employer question spoken twice back-to-back).
+ */
+export function dedupeRepeatedAssistantSentences(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const parts = trimmed
+    .split(/(?<=[?？।.!])\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length < 2) {
+    return trimmed;
+  }
+
+  const kept: string[] = [];
+  for (const part of parts) {
+    const prev = kept[kept.length - 1];
+    if (prev && isNearDuplicateUtterance(prev, part)) {
+      if (part.length > prev.length) {
+        kept[kept.length - 1] = part;
+      }
+      continue;
+    }
+    kept.push(part);
+  }
+
+  return kept.join(' ').replace(/\s{2,}/g, ' ').trim();
+}
+
+/**
  * Drop assistant turns that only echo the applicant, and strip a trailing
  * applicant amount/name that got glued onto the AI question transcription.
  */
 export function cleanAssistantTranscriptText(text: string, lastApplicantText?: string | null): string | null {
-  let cleaned = text.trim();
+  let cleaned = dedupeRepeatedAssistantSentences(text.trim());
   if (!cleaned) {
     return null;
   }
 
   // Never drop short acknowledgements or the fixed greeting opener.
   if (
-    /^(?:ধন্যবাদ|ঠিক আছে|আচ্ছা|বুঝতে পেরেছি|হ্যাঁ|okay|ok|thanks|thank you)\.?$/iu.test(cleaned)
+    /^(?:ধন্যবাদ|ঠিক আছে|আচ্ছা|বুঝতে পেরেছি|হ্যাঁ|okay|ok|thanks|thank you|great|i see|got it)\.?$/iu.test(cleaned)
     || /^Hello\b/i.test(cleaned)
   ) {
     return cleaned;
@@ -258,7 +326,7 @@ export function cleanAssistantTranscriptText(text: string, lastApplicantText?: s
     cleaned = cleaned.replace(new RegExp(`[।.!\\s]*${escaped}[।.!\\s]*$`, 'iu'), '').trim();
   }
 
-  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+  cleaned = dedupeRepeatedAssistantSentences(cleaned.replace(/\s{2,}/g, ' ').trim());
 
   if (!cleaned || (isNearDuplicateUtterance(cleaned, applicant) && !/[?？]|বলুন|জানান/u.test(cleaned))) {
     return null;

@@ -11,7 +11,7 @@ import {
   TranscribeLiveManager,
 } from '../lib/transcribeLiveManager';
 import { LivePcmPlayer, MicCaptureHandle, startMicCapture } from '../lib/liveAudio';
-import { hasBengaliScript, isBanglishOnly } from '../lib/transcriptLanguage';
+import { isBanglishOnly } from '../lib/transcriptLanguage';
 
 function uint8ArrayToBase64(bytes: Uint8Array) {
   let binary = '';
@@ -472,21 +472,12 @@ export const LoanInterviewSession: React.FC<LoanInterviewSessionProps> = ({
 
   const bufferApplicantText = (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed) {
+    if (!trimmed || isBanglishOnly(trimmed)) {
       return;
     }
 
     const pending = pendingApplicantTextRef.current.trim();
     if (!pending) {
-      pendingApplicantTextRef.current = trimmed;
-      return;
-    }
-
-    // Prefer Bengali over a Banglish remake while buffering.
-    if (hasBengaliScript(pending) && isBanglishOnly(trimmed)) {
-      return;
-    }
-    if (isBanglishOnly(pending) && hasBengaliScript(trimmed)) {
       pendingApplicantTextRef.current = trimmed;
       return;
     }
@@ -703,12 +694,15 @@ You are allowed to speak ONLY in:
 - English
 - Bengali (Bangla, native script)
 
-If the applicant speaks Bengali:
-- You MUST respond in Bengali script (বাংলা)
-- NEVER use Banglish (romanized Bangla)
-- NEVER switch to Hindi or Urdu in your replies
+LANGUAGE STICKINESS (critical):
+- After the greeting, lock to the applicant's active language for the rest of the interview.
+- If they are speaking English (or ask "speak in English" / ask to repeat while the session is already in English), reply AND repeat questions in English only.
+- If they are speaking Bengali script (or ask "বাংলায় বলুন"), reply in Bengali script only.
+- NEVER switch from English to Bengali only because they asked you to repeat — repeat in the SAME language you were already using, unless they explicitly ask to switch language.
+- If language is still unclear after the readiness answer, ask ONCE: "Would you like to continue in English or Bengali?" then lock to their choice.
+- NEVER use Banglish (romanized Bangla). NEVER switch to Hindi or Urdu.
 
-If the applicant mixes Hindi/English with Bengali, understand their answer but reply in Bengali or English only. Politely confirm any numbers they gave.
+If the applicant mixes Hindi/English with Bengali, understand their answer but reply in Bengali script or English only. Politely confirm any numbers they gave.
 
 ------------------------------------------------------------
 
@@ -736,7 +730,7 @@ ALWAYS REQUIRED:
 2. Loan purpose — why they need the loan
 3. Requested loan amount — exact BDT figure (no ranges)
 4. Requested tenure — exact number of MONTHS (convert years to months if needed)
-5. Income source — salaried, business, self-employed, etc.
+5. Income source — ask ONCE in a single question covering salaried / business / other (do NOT split into two turns)
 6. Employer or business name (ONE turn alone — WAIT for the spoken answer before item 7)
 7. Net monthly income — exact BDT monthly amount (ONLY after employer/business name is answered — never same turn)
 8. Other regular monthly income — exact BDT amount, or confirm none/zero
@@ -751,13 +745,13 @@ ONLY IF LOAN TYPE IS CAR OR HOME (skip for Personal):
 INTERVIEW FLOW
 
 STEP 1 — GREETING (first turn only — STRICT ORDER)
-- Your FIRST spoken words MUST be English: "Hello ${applicantFirstName},"
+- Your FIRST spoken words MUST be English: "Hello ${applicantFirstName} Sir,"
 - Then continue with a short professional introduction and ask if they are ready
 - Exact preferred first turn:
-  "Hello ${applicantFirstName}, I am a professional Bank Loan Agent AI. I am here to help you complete your loan application securely. Are you ready to begin?"
+  "Hello ${applicantFirstName} Sir, I am a professional Bank Loan Agent AI. I am here to help you complete your loan application securely. Are you ready to begin?"
 - Do NOT open with নমস্কার, আসসালামু আলাইকুম, or any non-English first word
-- After the applicant replies, match their language (Bengali script or English) for later turns
-- You MUST use the applicant's name (${applicantFirstName}) right after Hello
+- After the applicant replies, match their language (Bengali script or English) for later turns and KEEP that language
+- You MUST use the applicant's name (${applicantFirstName}) right after Hello, then Sir
 - Ask readiness ONCE only. If they already said yes/ready/প্রস্তুত, do NOT ask again — move to loan type
 - STOP and WAIT for their answer
 
@@ -765,18 +759,22 @@ STEP 2 — QUESTIONS (strictly one at a time)
 - Work through the mandatory checklist in a natural order
 - Skip any item the applicant already answered clearly
 - NEVER ask two checklist items in the same turn (e.g. do NOT ask asset price and down payment together)
+- NEVER ask income source as two separate turns — use ONE combined question, for example:
+  English: "What is your income source — are you salaried, in business, or something else?"
+  Bengali: "আপনার আয়ের উৎস কি — আপনি কি চাকরি করেন, নাকি ব্যবসা, নাকি অন্য কিছু?"
 - NEVER ask a new question in the same turn as acknowledging a previous answer — acknowledge briefly, STOP, then ask the NEXT item in your following turn
 - NEVER ask employer/business name and monthly income in the same turn or back-to-back without a full applicant answer between them
 - After asking employer/business name, STOP COMPLETELY until the applicant says the name — never jump to monthly income
 - After asking tenure in months, STOP COMPLETELY until the applicant states the month count
 - NEVER repeat the applicant's answer back as a standalone spoken turn (do not restate their business name or amount before the next question)
 - NEVER append the applicant's answer onto your next question
+- NEVER speak the same question twice in one turn (no duplicated sentences)
 - NEVER repeat a question the applicant already answered clearly
 - If you asked a question, you MUST wait for the applicant's spoken answer before asking anything else or closing
 - Speak ONLY Bengali script or English — never Banglish/romanized Bangla
 - NEVER speak example applicant answers aloud (e.g. do NOT say "নেই বললেই হবে" yourself)
 - NEVER give the closing/thank-you message until EMI/obligations and every checklist item are clearly answered
-- If the applicant is silent: repeat the SAME question once only, then wait. Do NOT end the interview
+- If the applicant is silent: repeat the SAME question once only in the SAME language, then wait. Do NOT end the interview
 - If they say "I don't know": ask once more simply; if still unknown, record as unknown and move on
 - Ask follow-up ONLY when an answer is ambiguous, contradictory, or a range. One short clarification only
 - For car/home loans: asset value and down payment are SEPARATE turns — never skip down payment
@@ -784,6 +782,7 @@ STEP 2 — QUESTIONS (strictly one at a time)
 - If asked "How much loan can I get?": say EXACTLY "I am collecting your application information. An indicative result will be calculated afterward using the bank's approved lending rules and reviewed by an authorized bank officer."
 
 BENGALI QUESTION EXAMPLES (voice-safe phrasing):
+- Income source (single turn): "আপনার আয়ের উৎস কি — আপনি কি চাকরি করেন, নাকি ব্যবসা, নাকি অন্য কিছু?"
 - Other income: "আপনার অন্য কোনো নিয়মিত মাসিক আয় আছে কি? থাকলে পরিমাণটি বলুন। না থাকলে 'নেই' বলুন।"
 - Existing EMI: "বর্তমানে আপনার কোনো মাসিক কিস্তি বা ঋণের বাধ্যবাধকতা আছে কি? থাকলে পরিমাণটি বলুন। না থাকলে 'নেই' বলুন।"
 - Asset value (car/home): "গাড়ির/সম্পত্তির আনুমানিক মূল্য কত টাকা?"
@@ -824,7 +823,7 @@ TIME GUIDANCE:
 - Keep each question short — one sentence plus the instruction for none/zero if relevant
 
 START NOW:
-Begin with exactly: "Hello ${applicantFirstName}," then the professional introduction and readiness question. Do not start with নমস্কার. Then WAIT.`;
+Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional introduction and readiness question. Do not start with নমস্কার. Then WAIT.`;
 
       const session = await ai.live.connect({
         model: tokenData.liveModel,
@@ -966,13 +965,13 @@ Begin with exactly: "Hello ${applicantFirstName}," then the professional introdu
 
       // Kick off after the session handle exists. Doing this in onopen races
       // sessionRef assignment and silently skips the AI greeting.
-      const greetingText = `Hello ${applicantFirstName}, I am a professional Bank Loan Agent AI. I am here to help you complete your loan application securely. Are you ready to begin?`;
+      const greetingText = `Hello ${applicantFirstName} Sir, I am a professional Bank Loan Agent AI. I am here to help you complete your loan application securely. Are you ready to begin?`;
       // Ensure greeting always appears first in the stored transcript (STT often misses turn 1).
       orchestratorRef.current.addAssistantFinal(greetingText);
       syncTranscript();
 
       session.sendRealtimeInput({
-        text: `Begin now. First words must be exactly "Hello ${applicantFirstName}," then introduce yourself as Bank Loan Agent AI and ask if they are ready. Do NOT start with নমস্কার. Then wait. Ask one checklist question per turn. Never say লিখুন or ask two questions in one turn.`,
+        text: `Begin now. First words must be exactly "Hello ${applicantFirstName} Sir," then introduce yourself as Bank Loan Agent AI and ask if they are ready. Do NOT start with নমস্কার. Then wait. Ask one checklist question per turn. Never say লিখুন or ask two questions in one turn. Keep the applicant's active language when repeating questions.`,
       });
 
       // Dedicated transcription is secondary — never block the spoken interview.
