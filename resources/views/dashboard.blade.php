@@ -50,8 +50,8 @@
                         </span>
                     @endif
                 </div>
-            </div>
-
+        </div>
+        
             <div class="ai-hero-rise-3 flex flex-wrap items-center gap-2 shrink-0">
                 @if($mode === 'recruiter' || ($showRecruitment && !$showLoans))
                     <a href="{{ route('recruitment.index') }}" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-bold transition-colors shadow-sm shadow-indigo-500/20">
@@ -162,21 +162,21 @@
                         <p class="text-[11px] text-indigo-700 font-medium">Assessed</p>
                         <p class="text-lg font-black text-indigo-700 mt-0.5 tabular-nums">{{ number_format($analystAssessed) }}</p>
                     </div>
-                </div>
-            </div>
+        </div>
+    </div>
 
             <div class="glass-panel rounded-xl overflow-hidden">
                 <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
                     <h3 class="text-sm font-bold text-slate-900">Recent Applications</h3>
                     <a href="{{ route('loan-applications.index') }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500">Manage</a>
-                </div>
+    </div>
                 <div class="divide-y divide-slate-100 max-h-[220px] overflow-y-auto">
                     @forelse($recentLoans as $loan)
                         <div class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors">
                             <div class="min-w-0 flex items-center gap-2.5">
                                 <div class="w-8 h-8 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-700 text-xs font-bold shrink-0">
                                     {{ strtoupper(substr($loan->applicant->name ?? '?', 0, 1)) }}
-                                </div>
+    </div>
                                 <div class="min-w-0">
                                     <p class="text-sm font-semibold text-slate-900 truncate">{{ $loan->applicant->name ?? 'Unknown' }}</p>
                                     <p class="text-[11px] text-slate-500 mt-0.5 truncate">
@@ -212,7 +212,7 @@
                     <h3 class="text-sm font-bold text-amber-900">Needs Review Queue</h3>
                 </div>
                 <a href="{{ route('loan-applications.index', ['status' => 'needs_review']) }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500">View queue</a>
-            </div>
+                            </div>
             <div class="divide-y divide-slate-100">
                 @forelse($needsReviewLoans as $loan)
                     <div class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
@@ -226,7 +226,7 @@
                                     {{ $loan->applicant->application_reference ?? '—' }}
                                     @if($loan->outcome)
                                         · {{ $loan->outcome }}
-                                    @endif
+                                @endif
                                 </p>
                             </div>
                         </div>
@@ -267,22 +267,22 @@
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     </div>
                 </div>
-            </div>
+                            </div>
         @endif
 
         @if($showRecruitment)
             <div class="glass-panel rounded-2xl px-5 py-4 group hover:border-emerald-200 transition-colors">
                 <div class="flex items-start justify-between gap-3">
-                    <div>
+                            <div>
                         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Completed</p>
                         <p class="text-2xl md:text-3xl font-black text-emerald-600 mt-1 tabular-nums">{{ number_format($completedInterviews) }}</p>
                         <p class="text-xs text-slate-500 mt-1">AI interviews finished</p>
                     </div>
                     <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                </div>
-            </div>
+                            </div>
+                        </div>
+    </div>
         @endif
 
         <div class="glass-panel rounded-2xl px-5 py-4 group hover:border-rose-200 transition-colors">
@@ -380,11 +380,11 @@
                         <div class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5">
                             <p class="text-xs font-medium text-emerald-700">Eligible</p>
                             <p class="text-lg font-black text-emerald-700 mt-0.5 tabular-nums">{{ number_format((int) ($loanOutcomeCounts['Indicatively Eligible'] ?? 0)) }}</p>
-                        </div>
+                            </div>
                         <div class="rounded-xl bg-rose-50 border border-rose-100 px-3 py-2.5">
                             <p class="text-xs font-medium text-rose-700">Not Eligible</p>
                             <p class="text-lg font-black text-rose-700 mt-0.5 tabular-nums">{{ number_format((int) ($loanOutcomeCounts['Not Eligible Under Current Rules'] ?? 0)) }}</p>
-                        </div>
+                            </div>
                         <div class="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5">
                             <p class="text-xs font-medium text-amber-700">Review</p>
                             <p class="text-lg font-black text-amber-700 mt-0.5 tabular-nums">{{ number_format((int) ($loanOutcomeCounts['Needs Review'] ?? 0)) }}</p>
@@ -410,7 +410,7 @@
                                 <div class="min-w-0">
                                     <p class="text-sm font-semibold text-slate-900 truncate">{{ $interview->candidate_name }}</p>
                                     <p class="text-xs text-slate-500 mt-0.5 truncate">{{ $interview->applied_role }} · {{ ucfirst($interview->status) }}</p>
-                                </div>
+                            </div>
                             </div>
                             @if($interview->status === 'completed')
                                 <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 whitespace-nowrap">Completed</span>
@@ -422,7 +422,7 @@
                         <div class="px-5 py-12 text-center text-sm text-slate-500">No recruitment activity yet.</div>
                     @endforelse
                 </div>
-            </div>
+                            </div>
         @endif
 
         @if($showLoans)
@@ -468,7 +468,7 @@
                 </div>
             </div>
         @endif
-    </div>
+                    </div>
     @endif
 
     <script>

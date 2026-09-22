@@ -41,6 +41,27 @@ Route::prefix('loan-interview')->group(function () {
     Route::post('/{token}/transcript', [\App\Http\Controllers\LoanInterviewController::class, 'saveTranscript'])->name('loan-interview.transcript');
 });
 
+Route::prefix('bank-opening')->group(function () {
+    Route::get('/{token}', [\App\Http\Controllers\BankOpeningPublicController::class, 'show'])->name('bank-opening.public');
+    Route::post('/{token}/information', [\App\Http\Controllers\BankOpeningPublicController::class, 'submitInformation'])->name('bank-opening.information');
+    Route::get('/{token}/interview', [\App\Http\Controllers\BankOpeningInterviewController::class, 'bootstrap'])->name('bank-opening.interview.bootstrap');
+    Route::post('/{token}/interview/match', [\App\Http\Controllers\BankOpeningInterviewController::class, 'matchProducts'])->name('bank-opening.interview.match');
+    Route::post('/{token}/interview/language', [\App\Http\Controllers\BankOpeningInterviewController::class, 'selectLanguage'])->name('bank-opening.interview.language');
+    Route::post('/{token}/interview/select-account', [\App\Http\Controllers\BankOpeningInterviewController::class, 'selectAccount'])->name('bank-opening.interview.select');
+    Route::post('/{token}/interview/confirm-account', [\App\Http\Controllers\BankOpeningInterviewController::class, 'confirmAccount'])->name('bank-opening.interview.confirm');
+    Route::post('/{token}/interview/answer', [\App\Http\Controllers\BankOpeningInterviewController::class, 'submitAnswer'])->name('bank-opening.interview.answer');
+    Route::post('/{token}/interview/clarify', [\App\Http\Controllers\BankOpeningInterviewController::class, 'clarify'])->name('bank-opening.interview.clarify');
+    Route::post('/{token}/interview/confirm-summary', [\App\Http\Controllers\BankOpeningInterviewController::class, 'confirmSummary'])->name('bank-opening.interview.confirm-summary');
+    Route::post('/{token}/interview/complete-live', [\App\Http\Controllers\BankOpeningInterviewController::class, 'completeLive'])->name('bank-opening.interview.complete-live');
+    Route::post('/{token}/live-token', [\App\Http\Controllers\GeminiLiveTokenController::class, 'bankOpening'])->name('bank-opening.live-token');
+    Route::post('/{token}/transcript', [\App\Http\Controllers\BankOpeningInterviewController::class, 'saveTranscript'])->name('bank-opening.transcript');
+    Route::get('/{token}/documents', [\App\Http\Controllers\BankOpeningInterviewController::class, 'listDocuments'])->name('bank-opening.documents.index');
+    Route::post('/{token}/documents', [\App\Http\Controllers\BankOpeningInterviewController::class, 'uploadDocument'])->name('bank-opening.documents.store');
+    Route::post('/{token}/documents/account-type', [\App\Http\Controllers\BankOpeningInterviewController::class, 'setDocumentsAccountType'])->name('bank-opening.documents.account-type');
+    Route::delete('/{token}/documents/{document}', [\App\Http\Controllers\BankOpeningInterviewController::class, 'removeDocument'])->name('bank-opening.documents.destroy');
+    Route::post('/{token}/submit', [\App\Http\Controllers\BankOpeningInterviewController::class, 'submitApplication'])->name('bank-opening.submit');
+});
+
 Route::post('/live/transcription-fallback', [\App\Http\Controllers\GeminiLiveTokenController::class, 'logTranscriptionFallback'])
     ->name('live.transcription-fallback');
 
@@ -101,6 +122,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/loan-applications/{application}/recalculate', [\App\Http\Controllers\LoanApplicationController::class, 'recalculate'])->name('loan-applications.recalculate');
         Route::post('/loan-applications/{application}/retry-extraction', [\App\Http\Controllers\LoanApplicationController::class, 'retryExtraction'])->name('loan-applications.retry-extraction');
         Route::delete('/loan-applications/{applicant}', [\App\Http\Controllers\LoanApplicationController::class, 'destroy'])->name('loan-applications.destroy');
+
+        Route::get('/bank-openings', [\App\Http\Controllers\BankOpeningApplicationController::class, 'index'])->name('bank-openings.index');
+        Route::get('/bank-openings/status-snapshot', [\App\Http\Controllers\BankOpeningApplicationController::class, 'statusSnapshot'])->name('bank-openings.status-snapshot');
+        Route::post('/bank-openings', [\App\Http\Controllers\BankOpeningApplicationController::class, 'store'])->name('bank-openings.store');
+        Route::get('/bank-openings/{application}', [\App\Http\Controllers\BankOpeningApplicationController::class, 'show'])->name('bank-openings.show');
+        Route::post('/bank-openings/{application}/generate-link', [\App\Http\Controllers\BankOpeningApplicationController::class, 'generateLink'])->name('bank-openings.generate-link');
+        Route::get('/bank-openings/{application}/documents/{document}/download', [\App\Http\Controllers\BankOpeningApplicationController::class, 'downloadDocument'])->name('bank-openings.documents.download');
+        Route::post('/bank-openings/{application}/notes', [\App\Http\Controllers\BankOpeningApplicationController::class, 'updateNotes'])->name('bank-openings.notes');
+        Route::post('/bank-openings/{application}/request-resubmission', [\App\Http\Controllers\BankOpeningApplicationController::class, 'requestResubmission'])->name('bank-openings.request-resubmission');
+        Route::delete('/bank-openings/{application}', [\App\Http\Controllers\BankOpeningApplicationController::class, 'destroy'])->name('bank-openings.destroy');
     });
 });
 

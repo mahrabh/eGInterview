@@ -25,6 +25,11 @@
                         {{ __('Loan Applicants') }}
                     </x-nav-link>
                     @endif
+                    @if(Auth::user()->canAccessBankOpening())
+                    <x-nav-link :href="route('bank-openings.index')" :active="request()->routeIs('bank-openings.*')">
+                        {{ __('Bank Account Opening') }}
+                    </x-nav-link>
+                    @endif
                     @if(Auth::user()->isAdmin())
                     <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')">
                         {{ __('Users') }}

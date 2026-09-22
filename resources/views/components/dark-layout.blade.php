@@ -166,9 +166,14 @@
     </style>
     <script>
         function showTranscript(name, text) {
-            document.getElementById('modal-title').innerText = name + "'s Transcript";
-            const displayText = text && text.trim() ? text : 'No transcript available.';
-            document.getElementById('modal-body').innerHTML = `<pre class="text-sm text-slate-700 whitespace-pre-wrap font-mono bg-slate-50 p-6 rounded-2xl border border-slate-200 leading-relaxed">${displayText}</pre>`;
+            document.getElementById('modal-title').innerText = (name || 'Applicant') + "'s Transcript";
+            const displayText = text && String(text).trim() ? String(text) : 'No transcript available.';
+            const body = document.getElementById('modal-body');
+            body.replaceChildren();
+            const pre = document.createElement('pre');
+            pre.className = 'text-sm text-slate-700 whitespace-pre-wrap font-sans bg-slate-50 p-6 rounded-2xl border border-slate-200 leading-relaxed';
+            pre.textContent = displayText;
+            body.appendChild(pre);
             document.getElementById('data-modal').classList.remove('hidden');
             document.getElementById('data-modal').classList.add('flex');
             setTimeout(() => {
@@ -332,6 +337,12 @@
                             Loan Applicants
                         </a>
                         @endif
+                        @if(Auth::check() && Auth::user()->canAccessBankOpening())
+                        <a href="{{ route('bank-openings.index') }}" class="ai-nav-link {{ request()->routeIs('bank-openings.*') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                            Bank Account Opening
+                        </a>
+                        @endif
                         @if(Auth::check() && Auth::user()->isAdmin())
                         <a href="{{ route('users.index') }}" class="ai-nav-link {{ request()->routeIs('users.*') ? 'is-active' : '' }} transition-colors flex items-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
@@ -396,6 +407,12 @@
                     <a href="{{ route('loan-applications.index') }}" class="ai-nav-link {{ request()->routeIs('loan-applications.*') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         Loan Applicants
+                    </a>
+                    @endif
+                    @if(Auth::check() && Auth::user()->canAccessBankOpening())
+                    <a href="{{ route('bank-openings.index') }}" class="ai-nav-link {{ request()->routeIs('bank-openings.*') ? 'is-active bg-white/10' : 'hover:bg-white/5 hover:text-white' }} rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                        Bank Account Opening
                     </a>
                     @endif
                     @if(Auth::check() && Auth::user()->isAdmin())

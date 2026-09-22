@@ -69,6 +69,11 @@ class User extends Authenticatable
         return $this->hasMany(LoanApplicant::class, 'created_by');
     }
 
+    public function bankOpeningApplicants(): HasMany
+    {
+        return $this->hasMany(BankOpeningApplicant::class, 'created_by');
+    }
+
     public function billingHistories(): HasMany
     {
         return $this->hasMany(BillingHistory::class);
@@ -105,6 +110,11 @@ class User extends Authenticatable
     }
 
     public function canAccessLoans(): bool
+    {
+        return $this->isAdmin() || $this->isAnalyst() || $this->isBoth();
+    }
+
+    public function canAccessBankOpening(): bool
     {
         return $this->isAdmin() || $this->isAnalyst() || $this->isBoth();
     }

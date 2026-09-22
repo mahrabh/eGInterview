@@ -9,7 +9,8 @@ export default defineConfig({
                 'resources/css/app.css', 
                 'resources/js/app.js',
                 'resources/js/live-interview.tsx',
-                'resources/js/loan-interview.tsx'
+                'resources/js/loan-interview.tsx',
+                'resources/js/bank-opening-interview.tsx',
             ],
             refresh: true,
         }),

@@ -11,7 +11,7 @@ export interface LiveTokenResponse {
 export interface TranscribeLiveManagerOptions {
   participantSpeaker: ParticipantSpeaker;
   languageCodes: string[];
-  context: 'loan' | 'recruitment';
+  context: 'loan' | 'recruitment' | 'bank_opening';
   orchestrator: TranscriptOrchestrator;
   onTranscriptChange: () => void;
   onFallbackChange: (usingFallback: boolean) => void;
@@ -88,7 +88,7 @@ export function createGeminiLiveClient(token: string): GoogleGenAI {
   } as ConstructorParameters<typeof GoogleGenAI>[0]);
 }
 
-async function logTranscriptionFallback(context: 'loan' | 'recruitment', reason: string): Promise<void> {
+async function logTranscriptionFallback(context: 'loan' | 'recruitment' | 'bank_opening', reason: string): Promise<void> {
   try {
     await fetch('/live/transcription-fallback', {
       method: 'POST',

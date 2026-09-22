@@ -37,10 +37,21 @@ class GeminiLiveTokenController extends Controller
         return $this->issueToken('loan');
     }
 
+    public function bankOpening(Request $request, string $token): JsonResponse
+    {
+        $application = \App\Models\BankOpeningApplication::findByPublicToken($token);
+
+        if (! $application || $application->isInterviewFinished()) {
+            abort(404);
+        }
+
+        return $this->issueToken('bank_opening');
+    }
+
     public function logTranscriptionFallback(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'context' => 'required|string|in:loan,recruitment',
+            'context' => 'required|string|in:loan,recruitment,bank_opening',
             'reason' => 'required|string|max:120',
         ]);
 
