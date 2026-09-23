@@ -16,7 +16,6 @@ import {
   TranscribeLiveManager,
 } from '../lib/transcribeLiveManager';
 import { LivePcmPlayer, MicCaptureHandle, startMicCapture } from '../lib/liveAudio';
-import { isBanglishOnly } from '../lib/transcriptLanguage';
 
 type Stage = 'setup' | 'live' | 'completed';
 
@@ -34,9 +33,9 @@ interface BankOpeningInterviewSessionProps {
 }
 
 const CLOSING_MESSAGE_BN =
-  "আপনার সময় ও প্রয়োজনীয় তথ্য দেওয়ার জন্য ধন্যবাদ। সাক্ষাৎকারটি সম্পন্ন করতে অনুগ্রহ করে 'End Session' বাটনে ক্লিক করুন।";
+  "আপনার সময় ও প্রয়োজনীয় তথ্য দেওয়ার জন্য ধন্যবাদ। এখন যাচাই ও ম্যানুয়াল রিভিউয়ের জন্য প্রয়োজনীয় ডকুমেন্ট জমা দিতে হবে। অনুগ্রহ করে 'End Session' বাটনে ক্লিক করে ডকুমেন্ট আপলোড ধাপে যান।";
 const CLOSING_MESSAGE_EN =
-  'Thank you for your time and for providing the required information. Please click the End Session button to complete the interview.';
+  'Thank you for your time and for providing the required information. You must now submit documents for verification and manual review. Please click the End Session button to continue to document upload.';
 
 function baoDiag(event: string, payload?: Record<string, unknown>) {
   console.debug('[bao-interview]', event, payload ?? {});
@@ -70,21 +69,114 @@ function isAssistantInstructionEcho(text: string): boolean {
   return false;
 }
 
+/** Shared markers for spoken/variant closings (canonical + paraphrases). */
+const CLOSING_START_PATTERNS: { re: RegExp; isBn: boolean; strong: boolean }[] = [
+  { re: /Thank you for your time/i, isBn: false, strong: true },
+  { re: /Please click the End Session/i, isBn: false, strong: true },
+  { re: /আপনার সম[য়য়]/g, isBn: true, strong: true },
+  { re: /আপনার দেওয়া সব তথ্য/g, isBn: true, strong: true },
+  { re: /আপনার দেওয়া সব তথ্য/g, isBn: true, strong: true },
+  { re: /এখন যাচাই/g, isBn: true, strong: true },
+  { re: /ডকুমেন্ট আপলোড ধাপে/g, isBn: true, strong: false },
+  { re: /End Session/i, isBn: false, strong: false },
+];
+
+function looksLikeClosingSpeech(text: string): boolean {
+  return CLOSING_START_PATTERNS.some(({ re }) => {
+    re.lastIndex = 0;
+    return re.test(text);
+  });
+}
+
+function findClosingStartPositions(text: string): { index: number; isBn: boolean; strong: boolean }[] {
+  const found: { index: number; isBn: boolean; strong: boolean }[] = [];
+  for (const { re, isBn, strong } of CLOSING_START_PATTERNS) {
+    const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+    const global = new RegExp(re.source, flags);
+    let match: RegExpExecArray | null;
+    while ((match = global.exec(text)) !== null) {
+      found.push({ index: match.index, isBn, strong });
+      if (match[0].length === 0) global.lastIndex += 1;
+    }
+  }
+  found.sort((a, b) => a.index - b.index || Number(b.strong) - Number(a.strong));
+  return found;
+}
+
+/** Index where a repeated closing copy begins (same marker twice), else null. */
+function findRepeatedClosingIndex(text: string): number | null {
+  let earliestSecond: number | null = null;
+  for (const { re } of CLOSING_START_PATTERNS) {
+    const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+    const global = new RegExp(re.source, flags);
+    const matches: number[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = global.exec(text)) !== null) {
+      matches.push(match.index);
+      if (match[0].length === 0) global.lastIndex += 1;
+    }
+    if (matches.length >= 2) {
+      const second = matches[1];
+      if (earliestSecond === null || second < earliestSecond) {
+        earliestSecond = second;
+      }
+    }
+  }
+  return earliestSecond;
+}
+
+function sentenceStartBefore(text: string, index: number): number {
+  const before = text.slice(0, index);
+  const lastStop = Math.max(
+    before.lastIndexOf('।'),
+    before.lastIndexOf('.'),
+    before.lastIndexOf('?'),
+    before.lastIndexOf('!'),
+  );
+  if (lastStop < 0) return 0;
+  let start = lastStop + 1;
+  while (start < index && /\s/.test(text[start] || '')) start += 1;
+  return start;
+}
+
+/**
+ * Split pre-closing speech from closing. Always returns the canonical closing once.
+ * If the model/STT repeated the closing, the second copy is discarded.
+ */
 function extractClosingSegment(text: string): { remainder: string; closing: string | null } {
-  const bnIdx = text.indexOf('আপনার সম');
-  const enIdx = text.search(/Thank you for your time/i);
-  let idx = -1;
+  const starts = findClosingStartPositions(text);
+  if (starts.length === 0) {
+    return { remainder: text, closing: null };
+  }
 
-  if (bnIdx >= 0 && enIdx >= 0) idx = Math.min(bnIdx, enIdx);
-  else if (bnIdx >= 0) idx = bnIdx;
-  else if (enIdx >= 0) idx = enIdx;
+  // Prefer the earliest strong marker so mid-closing phrases like "এখন যাচাই" are not the cut.
+  const strong = starts.filter((s) => s.strong);
+  const first = strong[0] || starts[0];
+  let cutAt = first.index;
+  if (!first.strong) {
+    cutAt = sentenceStartBefore(text, first.index);
+  }
 
-  if (idx < 0) return { remainder: text, closing: null };
+  const repeatAt = findRepeatedClosingIndex(text);
+  const closingSliceEnd = repeatAt !== null && repeatAt > cutAt ? repeatAt : text.length;
+  const closingSlice = text.slice(cutAt, closingSliceEnd).trim();
+  const isBn =
+    first.isBn
+    || /[\u0980-\u09FF]/.test(closingSlice)
+    || closingSlice.includes('এখন যাচাই')
+    || closingSlice.includes('ডকুমেন্ট');
 
   return {
-    remainder: text.slice(0, idx).trim(),
-    closing: bnIdx >= 0 && (enIdx < 0 || bnIdx <= enIdx) ? CLOSING_MESSAGE_BN : CLOSING_MESSAGE_EN,
+    remainder: text.slice(0, cutAt).trim(),
+    closing: isBn ? CLOSING_MESSAGE_BN : CLOSING_MESSAGE_EN,
   };
+}
+
+/** Keep at most one closing copy in the live STT buffer. */
+function dedupeClosingBuffer(text: string): string {
+  const repeatAt = findRepeatedClosingIndex(text);
+  if (repeatAt === null) return text;
+  return text.slice(0, repeatAt).trim();
 }
 
 export const BankOpeningInterviewSession: React.FC<BankOpeningInterviewSessionProps> = ({
@@ -122,8 +214,12 @@ export const BankOpeningInterviewSession: React.FC<BankOpeningInterviewSessionPr
   const intentionalCloseRef = useRef(false);
   const closingRequestedRef = useRef(false);
   const closingDeliveredRef = useRef(false);
+  const closingTranscriptPushedRef = useRef(false);
+  const closingTurnCompleteRef = useRef(false);
   const autoEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closingCountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const closingFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closingThanksHeardRef = useRef(false);
   const timeNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urgentNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hardLimitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -145,6 +241,7 @@ export const BankOpeningInterviewSession: React.FC<BankOpeningInterviewSessionPr
   const applicantSourceRef = useRef<'unset' | 'transcribe' | 'live_input'>('unset');
   const sessionStartLockRef = useRef(false);
   const greetingSeededRef = useRef(false);
+  const stopInterviewRef = useRef<() => Promise<void>>(async () => {});
 
   const token = interviewData?.token || interviewData?.public_url || candidateData?.token || '';
 
@@ -206,6 +303,7 @@ export const BankOpeningInterviewSession: React.FC<BankOpeningInterviewSessionPr
     if (assistantFlushTimerRef.current) clearTimeout(assistantFlushTimerRef.current);
     if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
     if (closingCountdownIntervalRef.current) clearInterval(closingCountdownIntervalRef.current);
+    if (closingFinalizeTimerRef.current) clearTimeout(closingFinalizeTimerRef.current);
     if (timeNudgeTimerRef.current) clearTimeout(timeNudgeTimerRef.current);
     if (urgentNudgeTimerRef.current) clearTimeout(urgentNudgeTimerRef.current);
     if (hardLimitTimerRef.current) clearTimeout(hardLimitTimerRef.current);
@@ -223,75 +321,8 @@ export const BankOpeningInterviewSession: React.FC<BankOpeningInterviewSessionPr
     setTranscript(next);
   };
 
-  const pushAssistantFinal = (text: string) => {
-    const cleaned = text.trim();
-    if (!cleaned || isAssistantInstructionEcho(cleaned)) return;
-    orchestratorRef.current.addAssistantFinal(cleaned);
-    syncTranscript();
-  };
-
-  const flushAssistantTranscript = () => {
-    const raw = pendingAssistantTextRef.current.trim();
-    pendingAssistantTextRef.current = '';
-    assistantTurnCompleteRef.current = false;
-    if (assistantFlushTimerRef.current) {
-      clearTimeout(assistantFlushTimerRef.current);
-      assistantFlushTimerRef.current = null;
-    }
-    if (!raw) return;
-
-    const { remainder, closing } = extractClosingSegment(raw);
-    if (remainder) pushAssistantFinal(remainder);
-    if (closing) {
-      pushAssistantFinal(closing);
-      closingDeliveredRef.current = true;
-      setWrapUpState('closing_done');
-      scheduleAutoEnd();
-    }
-  };
-
-  const tryFlushAssistantTranscript = () => {
-    if (!assistantTurnCompleteRef.current) return;
-    if (pcmPlayerRef.current?.isPlaying()) return;
-    flushAssistantTranscript();
-  };
-
-  const bufferAssistantText = (text: string) => {
-    if (!text) return;
-    pendingAssistantTextRef.current = `${pendingAssistantTextRef.current} ${text}`.trim();
-    if (assistantFlushTimerRef.current) clearTimeout(assistantFlushTimerRef.current);
-    assistantFlushTimerRef.current = setTimeout(() => tryFlushAssistantTranscript(), 500);
-  };
-
-  const commitApplicantFinal = (text: string, source: 'transcribe' | 'live_input') => {
-    const cleaned = text.trim();
-    if (!cleaned) return;
-    if (isBanglishOnly(cleaned) && source === 'live_input') return;
-    if (pcmPlayerRef.current?.isPlaying()) return;
-
-    if (applicantSourceRef.current === 'unset') {
-      applicantSourceRef.current = source;
-    } else if (applicantSourceRef.current !== source && source === 'live_input') {
-      return;
-    }
-
-    orchestratorRef.current.addParticipantFinal(cleaned);
-    syncTranscript();
-  };
-
-  const bufferApplicantLiveInput = (text: string) => {
-    if (!text || pcmPlayerRef.current?.isPlaying()) return;
-    pendingApplicantLiveRef.current = text;
-  };
-
-  const finalizeLiveInputApplicant = () => {
-    const text = pendingApplicantLiveRef.current.trim();
-    pendingApplicantLiveRef.current = '';
-    if (!text) return;
-    if (usingTranscribeFallbackRef.current || applicantSourceRef.current === 'live_input' || applicantSourceRef.current === 'unset') {
-      commitApplicantFinal(text, 'live_input');
-    }
-  };
+  const isApplicantClosingThanks = (text: string): boolean =>
+    /(?:^|\b)(thank(?:s|\s+you)?|thx|ধন্যবাদ|শুকরিয়া|শুক্রিয়া)(?:\b|$)/i.test(text.trim());
 
   const clearClosingTimers = () => {
     if (autoEndTimerRef.current) {
@@ -301,6 +332,10 @@ export const BankOpeningInterviewSession: React.FC<BankOpeningInterviewSessionPr
     if (closingCountdownIntervalRef.current) {
       clearInterval(closingCountdownIntervalRef.current);
       closingCountdownIntervalRef.current = null;
+    }
+    if (closingFinalizeTimerRef.current) {
+      clearTimeout(closingFinalizeTimerRef.current);
+      closingFinalizeTimerRef.current = null;
     }
     setClosingCountdown(null);
   };
@@ -318,12 +353,203 @@ export const BankOpeningInterviewSession: React.FC<BankOpeningInterviewSessionPr
       }
     }, 1000);
     autoEndTimerRef.current = setTimeout(() => {
-      void stopInterview();
+      void stopInterviewRef.current();
     }, CLOSING_AUTO_END_MS);
   };
 
+  /** Close Live only after the closing audio has fully finished (not mid-speech). */
+  const closeLiveModelSession = () => {
+    if (!sessionRef.current) return;
+    intentionalCloseRef.current = true;
+    try {
+      sessionRef.current.sendRealtimeInput({ audioStreamEnd: true });
+    } catch {
+      /* ignore */
+    }
+    try {
+      sessionRef.current.close();
+    } catch {
+      /* ignore */
+    }
+    sessionRef.current = null;
+  };
+
+  const markClosingSpeechStarted = () => {
+    if (closingRequestedRef.current) return;
+    closingRequestedRef.current = true;
+    setWrapUpState((prev) => (prev === 'active' ? 'closing' : prev));
+    // Do NOT close Live here — remaining closing PCM would be cut off.
+    // Mic → Live is already blocked while closingRequested (see startAudioCapture).
+  };
+
+  const finalizeClosingPhase = () => {
+    if (closingDeliveredRef.current) return;
+    // Never finalize while closing audio is still playing.
+    if (pcmPlayerRef.current?.isPlaying()) return;
+
+    closingRequestedRef.current = true;
+    closingDeliveredRef.current = true;
+    setWrapUpState('closing_done');
+    pendingAssistantTextRef.current = '';
+    closeLiveModelSession();
+
+    // Thanks during/after closing: end immediately once speech finished; else 5s countdown.
+    if (closingThanksHeardRef.current) {
+      void stopInterviewRef.current();
+      return;
+    }
+    scheduleAutoEnd();
+  };
+
+  /** Wait briefly after idle so late PCM chunks of the same closing can still enqueue. */
+  const scheduleFinalizeClosingPhase = () => {
+    if (closingDeliveredRef.current || !closingRequestedRef.current) return;
+    if (closingFinalizeTimerRef.current) clearTimeout(closingFinalizeTimerRef.current);
+    closingFinalizeTimerRef.current = setTimeout(() => {
+      closingFinalizeTimerRef.current = null;
+      if (pcmPlayerRef.current?.isPlaying()) return;
+      finalizeClosingPhase();
+    }, 700);
+  };
+
+  const noteClosingAudioChunk = () => {
+    // New closing audio arrived — cancel a premature finalize from a mid-stream idle gap.
+    if (closingFinalizeTimerRef.current) {
+      clearTimeout(closingFinalizeTimerRef.current);
+      closingFinalizeTimerRef.current = null;
+    }
+  };
+
+  const pushAssistantFinal = (text: string) => {
+    const cleaned = text.trim();
+    if (!cleaned || isAssistantInstructionEcho(cleaned)) return;
+    // Never append a second closing (or any post-closing AI speech) to the live transcript.
+    if (closingDeliveredRef.current) return;
+    if (closingTranscriptPushedRef.current && looksLikeClosingSpeech(cleaned)) return;
+    orchestratorRef.current.addAssistantFinal(cleaned);
+    syncTranscript();
+  };
+
+  const flushAssistantTranscript = () => {
+    const raw = pendingAssistantTextRef.current.trim();
+    pendingAssistantTextRef.current = '';
+    assistantTurnCompleteRef.current = false;
+    if (assistantFlushTimerRef.current) {
+      clearTimeout(assistantFlushTimerRef.current);
+      assistantFlushTimerRef.current = null;
+    }
+    if (!raw) return;
+    if (closingDeliveredRef.current) return;
+
+    const { remainder, closing } = extractClosingSegment(dedupeClosingBuffer(raw));
+    const shortAckOnly = /^(ধন্যবাদ\.?|শুকরিয়া\.?|শুক্রিয়া\.?|thank you\.?|thanks\.?)$/i.test(
+      (remainder || '').trim(),
+    );
+    if (remainder && !looksLikeClosingSpeech(remainder) && !shortAckOnly) {
+      pushAssistantFinal(remainder);
+    } else if (remainder && !closing && looksLikeClosingSpeech(remainder)) {
+      // Remainder itself is closing-like without a clean split — use canonical only.
+      if (!closingTranscriptPushedRef.current) {
+        pushAssistantFinal(
+          /[\u0980-\u09FF]/.test(remainder) ? CLOSING_MESSAGE_BN : CLOSING_MESSAGE_EN,
+        );
+        closingTranscriptPushedRef.current = true;
+        markClosingSpeechStarted();
+      }
+      return;
+    }
+
+    if (closing) {
+      if (!closingTranscriptPushedRef.current) {
+        pushAssistantFinal(closing);
+        closingTranscriptPushedRef.current = true;
+      }
+      markClosingSpeechStarted();
+      // Auto-end only after playback idle — never finalize here (audio may still be streaming).
+    } else if (closingRequestedRef.current && !closingTranscriptPushedRef.current) {
+      pushAssistantFinal(
+        /[\u0980-\u09FF]/.test(raw) || raw.includes('এখন যাচাই') ? CLOSING_MESSAGE_BN : CLOSING_MESSAGE_EN,
+      );
+      closingTranscriptPushedRef.current = true;
+    }
+  };
+
+  const tryFlushAssistantTranscript = () => {
+    if (!assistantTurnCompleteRef.current) return;
+    if (pcmPlayerRef.current?.isPlaying()) return;
+    flushAssistantTranscript();
+  };
+
+  const bufferAssistantText = (text: string) => {
+    if (!text || closingDeliveredRef.current) return;
+    // After one closing bubble is on the transcript, ignore further model STT.
+    if (closingTranscriptPushedRef.current) return;
+
+    pendingAssistantTextRef.current = dedupeClosingBuffer(
+      `${pendingAssistantTextRef.current} ${text}`.trim(),
+    );
+    // As soon as closing language appears, stop feeding mic to Live (repeat prevention).
+    if (looksLikeClosingSpeech(pendingAssistantTextRef.current)) {
+      markClosingSpeechStarted();
+    }
+    if (assistantFlushTimerRef.current) clearTimeout(assistantFlushTimerRef.current);
+    assistantFlushTimerRef.current = setTimeout(() => tryFlushAssistantTranscript(), 500);
+  };
+
+  const commitApplicantFinal = (text: string, source: 'transcribe' | 'live_input') => {
+    const cleaned = text.trim();
+    if (!cleaned) return;
+
+    // After closing starts: ignore applicant text for the AI.
+    // Thanks ends the session only after closing audio has finished (or immediately if already done).
+    if (closingDeliveredRef.current || closingRequestedRef.current) {
+      if (isApplicantClosingThanks(cleaned)) {
+        closingThanksHeardRef.current = true;
+        if (closingDeliveredRef.current) {
+          void stopInterviewRef.current();
+        }
+        // else: finalizeClosingPhase will end immediately once speech completes
+      }
+      return;
+    }
+
+    if (applicantSourceRef.current === 'unset') {
+      applicantSourceRef.current = source;
+    } else if (applicantSourceRef.current !== source && source === 'live_input') {
+      if (applicantSourceRef.current === 'transcribe') {
+        return;
+      }
+    }
+
+    orchestratorRef.current.addParticipantFinal(cleaned, 'applicant');
+    syncTranscript();
+  };
+
+  const bufferApplicantLiveInput = (text: string) => {
+    if (!text) return;
+    if (closingDeliveredRef.current || closingRequestedRef.current) {
+      if (isApplicantClosingThanks(text)) {
+        closingThanksHeardRef.current = true;
+        if (closingDeliveredRef.current) {
+          void stopInterviewRef.current();
+        }
+      }
+      return;
+    }
+    pendingApplicantLiveRef.current = text;
+  };
+
+  const finalizeLiveInputApplicant = () => {
+    const text = pendingApplicantLiveRef.current.trim();
+    pendingApplicantLiveRef.current = '';
+    if (!text) return;
+    if (usingTranscribeFallbackRef.current || applicantSourceRef.current === 'live_input' || applicantSourceRef.current === 'unset') {
+      commitApplicantFinal(text, 'live_input');
+    }
+  };
+
   const nudgeIncompleteChecklist = (message: string) => {
-    if (!sessionRef.current || closingDeliveredRef.current) return;
+    if (!sessionRef.current || closingDeliveredRef.current || closingRequestedRef.current) return;
     try {
       sessionRef.current.sendRealtimeInput({ text: message });
     } catch {
@@ -421,23 +647,34 @@ STEP 3 — PROFILE QUESTIONS (strictly one at a time)
 - NEVER repeat a question they already answered clearly
 - Ask follow-up ONLY when an answer is ambiguous, contradictory, or a range — one short clarification only
 - Keep opening deposit separate from monthly deposit / turnover / remittance
+- AMOUNTS (verified table in the catalog guide — mandatory):
+  - Follow the "UCB BANK: OPENING DEPOSIT & MONTHLY / REMITTANCE VALIDATION" block exactly
+  - When asking opening_deposit or monthly/remittance/turnover: briefly state the verified minimum for the confirmed account type, then WAIT
+  - If the applicant says an amount BELOW that minimum (including absurd amounts like BDT 10 or 20): REJECT it, state the minimum again, and re-ask — do NOT accept it and do NOT close
+  - If they ask for a suggested/required opening amount: answer with the verified floor for that account — NEVER say "there is no suggested amount" when a floor exists
+  - NEVER invent amounts outside the verified table
+  - For Sabuj Shanchay, also reject monthly amounts above BDT 100,000
 
 STEP 3.5 — VERIFY BEFORE CLOSING (internal — do NOT read aloud)
 Before STEP 4, confirm:
 □ Account type chosen and confirmed
 □ Every question in that profile has a clear applicant answer
+□ Opening and monthly/remittance amounts (when asked) meet the verified floors for that account
 
 If ANY box is unchecked, ask that ONE missing item now and WAIT. Do NOT close.
 
 STEP 4 — CLOSING (ONLY when STEP 3.5 passes)
 - Give ONLY the closing message — no questions after it
+- The closing MUST mention document submission for verification BEFORE telling them to click End Session
 - English (say exactly once): "${CLOSING_MESSAGE_EN}"
 - Bengali (say exactly once): "${CLOSING_MESSAGE_BN}"
-- After the closing message, STOP COMPLETELY. Remain silent.
+- Say the closing message EXACTLY ONCE — do not paraphrase it twice, do not append it again in the same turn, and never repeat it in a later turn.
+- After the closing message, STOP COMPLETELY. Remain silent forever for this session.
+- If the applicant says thank you / ধন্যবাদ / anything else after closing: do NOT reply, do NOT repeat the closing, do NOT ask questions.
 - NEVER tell the applicant to click End Session before STEP 4
 
 If the applicant explicitly wants to stop:
-- Acknowledge briefly, then say EXACTLY: "Certainly. Please click the End Session button to submit your interview."
+- Acknowledge briefly, then say EXACTLY: "Certainly. You will still need to submit documents for verification. Please click the End Session button to continue to document upload."
 
 START NOW:
 Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional introduction and readiness question. Then WAIT.`;
@@ -451,22 +688,35 @@ Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional int
     micCaptureRef.current = await startMicCapture(
       stream,
       (pcmData) => {
-        if (isMutedRef.current || !sessionRef.current) return;
-        if (pcmPlayerRef.current?.isPlaying()) return;
+        if (isMutedRef.current) return;
 
         const base64Pcm = uint8ArrayToBase64(new Uint8Array(pcmData.buffer));
-        sessionRef.current.sendRealtimeInput({
-          audio: { mimeType: 'audio/pcm;rate=16000', data: base64Pcm },
-        });
+        // After closing starts, keep STT only so we can detect "thanks" and end early —
+        // never send more audio into the Live conversation model (prevents repeated closing).
+        if (closingDeliveredRef.current || closingRequestedRef.current) {
+          transcribeManagerRef.current?.sendAudio(base64Pcm);
+          return;
+        }
+
         transcribeManagerRef.current?.sendAudio(base64Pcm);
+        if (!pcmPlayerRef.current?.isPlaying() && sessionRef.current) {
+          sessionRef.current.sendRealtimeInput({
+            audio: { mimeType: 'audio/pcm;rate=16000', data: base64Pcm },
+          });
+        }
       },
       (level) => setAudioLevel(level),
     );
   };
 
   const handleAssistantPlaybackIdle = () => {
+    const closingInProgress = closingRequestedRef.current && !closingDeliveredRef.current;
     tryFlushAssistantTranscript();
     finalizeLiveInputApplicant();
+    // Only after closing audio has drained (and a short settle) — never mid-speech.
+    if (closingInProgress && !closingDeliveredRef.current) {
+      scheduleFinalizeClosingPhase();
+    }
   };
 
   const startLiveInterview = async () => {
@@ -544,15 +794,25 @@ Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional int
             }, INTERVIEW_LONG_NUDGE_MS);
           },
           onmessage: async (message: LiveServerMessage) => {
-            if (closingDeliveredRef.current) return;
+            // After closing is finalized, ignore everything (no repeated closing).
+            if (closingDeliveredRef.current) {
+              return;
+            }
 
             const serverContent = (message as any).serverContent;
             if (!serverContent) return;
 
             const base64Audio = serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
-              const pcmData = new Int16Array(base64ToUint8Array(base64Audio).buffer);
-              pcmPlayerRef.current?.enqueue(pcmData);
+              // After the first closing turn completes, drop a second spoken closing.
+              // Still allow late PCM of the first turn while it is playing.
+              const dropSecondClosingAudio =
+                closingTurnCompleteRef.current && !pcmPlayerRef.current?.isPlaying();
+              if (!dropSecondClosingAudio) {
+                noteClosingAudioChunk();
+                const pcmData = new Int16Array(base64ToUint8Array(base64Audio).buffer);
+                pcmPlayerRef.current?.enqueue(pcmData);
+              }
             }
 
             let userText = '';
@@ -564,7 +824,7 @@ Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional int
                 || serverContent.inputTranscription?.text
                 || '';
             }
-            if (userText && !pcmPlayerRef.current?.isPlaying()) {
+            if (userText) {
               bufferApplicantLiveInput(userText);
             }
 
@@ -581,9 +841,15 @@ Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional int
 
             if (serverContent.turnComplete) {
               assistantTurnCompleteRef.current = true;
+              if (closingRequestedRef.current) {
+                closingTurnCompleteRef.current = true;
+              }
               tryFlushAssistantTranscript();
               if (!pcmPlayerRef.current?.isPlaying()) {
                 finalizeLiveInputApplicant();
+                if (closingRequestedRef.current && !closingDeliveredRef.current) {
+                  scheduleFinalizeClosingPhase();
+                }
               }
             }
           },
@@ -657,9 +923,8 @@ Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional int
             },
           );
           await transcribeManagerRef.current.start();
-          if (applicantSourceRef.current === 'unset') {
-            applicantSourceRef.current = 'transcribe';
-          }
+          // Do not lock applicantSource to 'transcribe' until a final arrives —
+          // otherwise quiet STT permanently blocks live_input fallback.
         } catch {
           usingTranscribeFallbackRef.current = true;
           if (applicantSourceRef.current === 'unset') {
@@ -763,6 +1028,7 @@ Begin with exactly: "Hello ${applicantFirstName} Sir," then the professional int
 
     persistCompleteInBackground(transcriptText);
   };
+  stopInterviewRef.current = stopInterview;
 
   // —— Documents (account-type groups) ——
   if (stage === 'completed') {

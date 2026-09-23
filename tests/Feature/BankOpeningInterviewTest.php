@@ -39,6 +39,48 @@ class BankOpeningInterviewTest extends TestCase
             ->assertSee('bank-opening-interview', false);
     }
 
+    public function test_same_officer_cannot_reuse_phone_on_another_application(): void
+    {
+        $analyst = User::factory()->create(['role' => 'analyst']);
+
+        [, $first] = $this->readyForInterview($analyst);
+        [$tokenB] = $this->invite($analyst);
+
+        $this->assertSame($first->applicant->created_by, $analyst->id);
+
+        $this->post(route('bank-opening.information', $tokenB), [
+            'name' => 'Another Person',
+            'phone' => '01715551234',
+        ])
+            ->assertRedirect(route('bank-opening.public', $tokenB))
+            ->assertSessionHas('error');
+
+        $this->get(route('bank-opening.public', $tokenB))
+            ->assertOk()
+            ->assertSee('already used for another application', false)
+            ->assertDontSee('bank-opening-interview-root', false);
+    }
+
+    public function test_different_officers_may_use_the_same_phone(): void
+    {
+        $officerA = User::factory()->create(['role' => 'analyst']);
+        $officerB = User::factory()->create(['role' => 'analyst']);
+
+        $this->readyForInterview($officerA);
+        [$tokenB] = $this->invite($officerB);
+
+        $this->post(route('bank-opening.information', $tokenB), [
+            'name' => 'Same Phone Different Officer',
+            'phone' => '01715551234',
+        ])
+            ->assertRedirect(route('bank-opening.public', $tokenB))
+            ->assertSessionHas('success');
+
+        $this->get(route('bank-opening.public', $tokenB))
+            ->assertOk()
+            ->assertSee('bank-opening-interview-root', false);
+    }
+
     public function test_ucb_greeting_uses_applicant_name_and_brand(): void
     {
         [$token] = $this->readyForInterview();
@@ -517,5 +559,40 @@ class BankOpeningInterviewTest extends TestCase
         $application->save();
 
         return [$token, $application->fresh(), $analyst];
+    }
+
+    public function test_live_interview_guide_includes_verified_amount_floors(): void
+    {
+        $guide = \App\Support\BankOpening\AccountProductCatalog::liveInterviewGuide();
+
+        $this->assertStringContainsString('OPENING DEPOSIT & MONTHLY / REMITTANCE VALIDATION', $guide);
+        $this->assertStringContainsString('ucb_probashi', $guide);
+        $this->assertStringContainsString('opening min BDT 500', $guide);
+        $this->assertStringContainsString('monthly remittance min BDT 500', $guide);
+        $this->assertStringContainsString('ucb_nrb_savings', $guide);
+        $this->assertStringContainsString('monthly remittance min BDT 5,000', $guide);
+        $this->assertStringContainsString('Never accept absurdly low amounts', $guide);
+        $this->assertStringContainsString('REJECT immediately', $guide);
+
+        $rules = \App\Support\BankOpening\AccountProductCatalog::verifiedAmountRules();
+        $this->assertSame(500, $rules['ucb_probashi']['monthly_min_bdt']);
+        $this->assertSame(5000, $rules['ucb_nrb_savings']['monthly_min_bdt']);
+        $this->assertSame(1000, $rules['savings']['opening_min_bdt']);
+        $this->assertSame(50000, $rules['dynamic_benefits']['opening_min_bdt']);
+        $this->assertSame(100000, $rules['sabuj_shanchay']['monthly_max_bdt']);
+    }
+
+    public function test_bootstrap_exposes_amount_validation_guide_to_live_client(): void
+    {
+        [$token] = $this->readyForInterview();
+
+        $payload = $this->getJson(route('bank-opening.interview.bootstrap', $token))
+            ->assertOk()
+            ->json();
+
+        $this->assertArrayHasKey('live_interview_guide', $payload);
+        $this->assertStringContainsString('ucb_probashi', $payload['live_interview_guide']);
+        $this->assertStringContainsString('opening min BDT 500', $payload['live_interview_guide']);
+        $this->assertStringContainsString('REJECT immediately', $payload['live_interview_guide']);
     }
 }

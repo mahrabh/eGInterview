@@ -79,15 +79,12 @@ export function isBanglishOnly(text: string): boolean {
 /**
  * Keep Bengali/English participant text. Drop turns that are mostly wrong-script
  * mis-transcriptions (e.g. Hindi Devanagari from Bengali speech).
+ * Banglish is kept so applicant answers are not lost when Bengali STT fails;
+ * orchestrator still prefers a Bengali twin when both arrive.
  */
 export function sanitizeParticipantTranscript(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed) {
-    return null;
-  }
-
-  // Drop romanized Bangla junk entirely — dual STT usually also emits a Bengali/English twin.
-  if (isBanglishOnly(trimmed)) {
     return null;
   }
 
